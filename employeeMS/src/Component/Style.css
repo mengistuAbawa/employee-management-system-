@@ -1,0 +1,78 @@
+.login-page {
+  width: 500px;
+  height: 200px;
+margin-left: 400px;
+  padding: 70px;
+  flex-direction: column;
+  background-color: #718eb9;
+  gap: 50px;
+  align-content: center;
+   
+}
+.login-form{
+ box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); 
+ color: antiquewhite;  
+}
+/* Styling for the background */
+.login-page {
+  background: linear-gradient(135deg, #667eea 0%, #c9c1d0 100%);
+  height: 100vh;
+}
+
+/* The login card container */
+.login-form {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: blur(4px);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 2.5rem !important;
+  width: 100%;
+  max-width: 400px; /* Better than w-25 for responsiveness */
+}
+
+
+.login-form input[type="email"],
+.login-form input[type="password"] {
+  padding: 10px;
+  border: 1px solid #c15757;
+  transition: border-color 0.3s ease;
+}
+
+.login-form input:focus {
+  border-color: #764ba2;
+  box-shadow: 0 0 5px rgba(118, 75, 162, 0.3);
+  outline: none;
+}
+
+/* The Login Button */
+.btn-success {
+  background: #764ba2 !important;
+  border: none !important;
+  padding: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  transition: 0.3s;
+}
+
+.btn-success:hover {
+  background: #5a377d !important;
+  transform: translateY(-1px);
+}
+
+/* Error message styling */
+.error-msg {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 10px;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  text-align: center;
+}
+.login-form h2{
+  color: aquamarine;
+}
+.check-box{
+   color: rgb(29, 57, 48);
+}

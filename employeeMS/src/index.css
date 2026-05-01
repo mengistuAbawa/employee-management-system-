@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+  body.dark {
+    @apply bg-gray-900 text-gray-100;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors;
+  }
+  .btn-success {
+    @apply px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors;
+  }
+  .btn-danger {
+    @apply px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors;
+  }
+  .btn-warning {
+    @apply px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors;
+  }
+  .btn-info {
+    @apply px-4 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700 transition-colors;
+  }
+  .card {
+    @apply bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4;
+  }
+  .input-field {
+    @apply w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500;
+  }
+}
