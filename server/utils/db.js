@@ -7,16 +7,31 @@ const { Pool } = pg;
 
 dotenv.config({ path: resolve(dirname(fileURLToPath(import.meta.url)), "../.env") });
 
-const connectionConfig = process.env.DATABASE_URL
-  ? { connectionString: process.env.DATABASE_URL }
+const databaseUrl = String(process.env.DATABASE_URL || "").trim();
+const connectionConfig = databaseUrl
+  ? { connectionString: databaseUrl }
   : {
-      host: process.env.DB_HOST || "localhost",
-      port: Number(process.env.DB_PORT || 5432),
-      user: process.env.DB_USER || "postgres",
-      password: process.env.DB_PASS || "",
-      database: process.env.DB_NAME || "employees",
-      ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
+      host: String(process.env.DB_HOST || "localhost"),
+      port: Number(String(process.env.DB_PORT || "5432")),
+      user: String(process.env.DB_USER || "postgres"),
+      password: String(process.env.DB_PASS ?? ""),
+      database: String(process.env.DB_NAME || "employees"),
+      ssl: String(process.env.DB_SSL || "").toLowerCase() === "true"
+        ? { rejectUnauthorized: false }
+        : false,
     };
+
+// pg's SCRAM authentication requires the password option to exist as a string.
+// Do this after constructing the config because dotenv can represent an empty
+// PostgreSQL password as undefined in some environments.
+if (!connectionConfig.connectionString) {
+  connectionConfig.password = typeof connectionConfig.password === "string"
+    ? connectionConfig.password
+    : "";
+  if (!connectionConfig.password) {
+    delete connectionConfig.password;
+  }
+}
 
 const pool = new Pool(connectionConfig);
 
