@@ -20,8 +20,8 @@ const Start = () => {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors relative">
-      <div className="absolute top-4 right-4">
+    <div className="flex min-h-[420px] w-full items-center justify-center rounded-3xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 p-6 transition-colors relative">
+      <div className="hidden">
         <button
           onClick={toggleTheme}
           className="p-2 rounded-full bg-white/20 backdrop-blur text-white hover:bg-white/30 transition-colors"
@@ -59,4 +59,3 @@ const Start = () => {
 };
 
 export default Start;
-

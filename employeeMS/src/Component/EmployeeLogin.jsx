@@ -91,8 +91,8 @@ const EmployeeLogin = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-100 to-emerald-300 dark:from-gray-900 dark:to-gray-800 transition-colors">
-      <div className="absolute top-4 right-4">
+    <div className="w-full flex items-center justify-center py-8">
+      <div className="hidden">
         <button
           onClick={toggleTheme}
           className="p-2 rounded-full bg-white dark:bg-gray-700 shadow-md text-gray-800 dark:text-yellow-300 transition-colors"
@@ -194,6 +194,8 @@ const EmployeeLogin = () => {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Password</label>
             <input
               type="password"
+              autoComplete={isRegister ? "new-password" : "current-password"}
+              minLength={isRegister ? 12 : undefined}
               className="input-field"
               placeholder="Enter password"
               required

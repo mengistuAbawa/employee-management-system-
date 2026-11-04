@@ -4,14 +4,32 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import multer from "multer";
 import path from "path";
+import { rateLimit } from "express-rate-limit";
 
 // Socket.io emitters (optional, only if server index exposes `io`)
 import { emitEmployeeCountUpdated, emitPendingEmployeesUpdated } from "../socket/dashboardEmitter.js";
 
 
 const router = express.Router();
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { loginStatus: false, Error: "Too many sign-in attempts. Try again later." },
+});
+const cookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production" || process.env.COOKIE_SAME_SITE === "none",
+  sameSite: process.env.COOKIE_SAME_SITE || "strict",
+  maxAge: 24 * 60 * 60 * 1000,
+});
+
 //to check if admin is logged in or not
-router.post("/adminlogin", (req, res) => {
+router.post("/adminlogin", loginLimiter, (req, res) => {
+  if (!req.body?.email || !req.body?.password) {
+    return res.status(400).json({ loginStatus: false, Error: "Email and password are required" });
+  }
   const sql = `SELECT * FROM admin WHERE email = ?`;
   con.query(sql, [req.body.email], (err, result) => {
     if (err) {
@@ -37,14 +55,10 @@ router.post("/adminlogin", (req, res) => {
           const token = jwt.sign(
             { role: "admin", email: email, id: result[0].id },
             process.env.JWT_SECRET,
-            { expiresIn: "1d" },
+            { expiresIn: process.env.JWT_EXPIRES_IN || "1d" },
           );
 
-          res.cookie("token", token, {
-            httpOnly: true,
-            secure: false,
-            sameSite: "strict",
-          });
+          res.cookie("token", token, cookieOptions());
           return res.json({ loginStatus: true, message: "Login successful" });
         } else {
           return res.status(401).json({ loginStatus: false, Error: "Invalid email or password" });
@@ -53,6 +67,51 @@ router.post("/adminlogin", (req, res) => {
     } else {
       return res.status(401).json({ loginStatus: false, Error: "Invalid email or password" });
     }
+  });
+});
+
+router.use((req, res, next) => {
+  const employeeRoutePrefixes = [
+    "/employee/detail/",
+    "/employee/leaves/",
+    "/employee/salary/",
+    "/employee/update/",
+    "/employee/update_profile_image/",
+  ];
+  if (
+    req.path === "/verify" ||
+    req.path === "/employee/employee_login" ||
+    req.path === "/employee/register" ||
+    req.path === "/employee/logout" ||
+    (req.path === "/employee/leaves" && req.method === "POST") ||
+    req.path === "/employee/attendance" ||
+    employeeRoutePrefixes.some((prefix) => req.path.startsWith(prefix)) ||
+    req.path === "/images" ||
+    req.path.startsWith("/images/")
+  ) {
+    return next();
+  }
+
+  if (
+    req.method === "GET" &&
+    (req.path === "/category" || req.path === "/auth/department")
+  ) {
+    return next();
+  }
+
+  const token = req.cookies?.token;
+  if (!token || !process.env.JWT_SECRET) {
+    return res.status(401).json({ Status: false, Error: "Authentication required" });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (error, decoded) => {
+    if (error || decoded.role !== "admin") {
+      return res.status(401).json({ Status: false, Error: "Administrator access required" });
+    }
+
+    req.id = decoded.id;
+    req.role = decoded.role;
+    next();
   });
 });
 
@@ -461,11 +520,8 @@ router.delete("/delete_admin/:ID", (req, res) => {
 
 // Logout - clear token cookie
 router.post("/logout", (req, res) => {
-  res.clearCookie("token", {
-    httpOnly: true,
-    secure: false,
-    sameSite: "strict",
-  });
+  const { maxAge, ...clearOptions } = cookieOptions();
+  res.clearCookie("token", clearOptions);
   return res.json({ Status: true, Message: "Logged out" });
 });
 

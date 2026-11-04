@@ -3,17 +3,18 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import helmet from "helmet";
 dotenv.config();
 
-// Fail fast if JWT secret is missing to avoid confusing login errors
-if (!process.env.JWT_SECRET) {
-  console.warn("[WARN] JWT_SECRET is not set. Admin/Employee login tokens will fail.");
+if (process.env.NODE_ENV === "production" && (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32)) {
+  throw new Error("Set JWT_SECRET to a random value of at least 32 characters in production.");
 }
 
 import { adminRouter } from "./Routes/AdminRoute.js";
 import { EmployeeRouter } from "./Routes/EmployeeRoute_fixed.js";
 const app = express();
 
+app.use(helmet());
 app.use(cors({
     origin:[...new Set([
       'http://localhost:5173',
@@ -41,14 +42,14 @@ const verifyUser = (req, res, next) => {
   const token = req.cookies.token;
   if (token) {
 jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-      if (err) return res.json({ Status: false, Error: "Wrong Token" });
+      if (err) return res.status(401).json({ Status: false, Error: "Authentication required" });
 
       req.id = decoded.id;
       req.role = decoded.role;
       next();
     });
   } else {
-    return res.json({ Status: false, Error: "Not authenticated" });
+    return res.status(401).json({ Status: false, Error: "Authentication required" });
   }
 };
 
@@ -141,6 +142,7 @@ io.on("connection", (socket) => {
   });
 });
 
-httpServer.listen(3000, () => {
-  console.log("The server is done (HTTP + Socket.IO)");
+const port = Number(process.env.PORT) || 3000;
+httpServer.listen(port, () => {
+  console.log(`The server is done (HTTP + Socket.IO) on port ${port}`);
 });

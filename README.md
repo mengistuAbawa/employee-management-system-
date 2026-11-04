@@ -39,4 +39,16 @@ All protected by JWT. See server/Routes/*.js
 ## Database Setup
 Create the `employees` database in PostgreSQL, copy `server/.env.example` to `server/.env`, and run `server/utils/postgres_schema.sql`.
 
+## Initial administrator
+Public administrator sign-up is disabled. To create the first administrator, set
+`ADMIN_FULL_NAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in the server environment,
+then run `npm run create-admin` from `server`. The command only creates an
+administrator when the admin table is empty; remove the bootstrap variables after
+the command completes.
+
+For production, set a randomly generated `JWT_SECRET` (at least 32 characters),
+`NODE_ENV=production`, and the frontend's exact origin in `FRONTEND_URL`. If the
+frontend and API are on different sites, configure `COOKIE_SAME_SITE=none` and
+serve both over HTTPS.
+
 **Production-ready Full-Stack EMS! 🎉**

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { CalendarOff, Plus } from "lucide-react";
 
@@ -17,7 +17,7 @@ const EmployeeMyLeaves = () => {
 
   const employeeId = localStorage.getItem("employeeId");
 
-  const fetchLeaves = () => {
+  const fetchLeaves = useCallback(() => {
     if (!employeeId) return;
     axios
       .get(`http://localhost:3000/employee/leaves/${employeeId}`, { withCredentials: true })
@@ -25,11 +25,11 @@ const EmployeeMyLeaves = () => {
         if (res.data?.Status) setLeaves(res.data.Result || []);
       })
       .catch((err) => console.error(err));
-  };
+  }, [employeeId]);
 
   useEffect(() => {
     fetchLeaves();
-  }, [employeeId]);
+  }, [fetchLeaves]);
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -37,7 +37,7 @@ const EmployeeMyLeaves = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await axios.post("http://localhost:3000/auth/leaves", { ...form, employee_id: employeeId }, { withCredentials: true });
+      const res = await axios.post("http://localhost:3000/employee/leaves", form, { withCredentials: true });
       if (res.data.Status) {
         setForm({ leave_type: "Annual", start_date: "", end_date: "", reason: "" });
         setShowForm(false);
@@ -135,4 +135,3 @@ const EmployeeMyLeaves = () => {
 };
 
 export default EmployeeMyLeaves;
-

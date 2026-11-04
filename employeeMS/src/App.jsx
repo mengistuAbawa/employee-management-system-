@@ -32,6 +32,7 @@ import EditDepartment from "./Component/EditDepartment";
 import HelpSupport from "./Component/HelpSupport";
 import ProtectedRoute from "./Component/ProtectedRoute";
 import AttendanceControl from "./Component/AttendanceControl";
+import PublicLayout from "./Component/PublicLayout";
 
 
 function App() {
@@ -39,10 +40,19 @@ function App() {
     <ThemeProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Start />} />
-          <Route path="/adminlogin" element={<Login />} />
-          <Route path="/employee_login" element={<EmployeeLogin />} />
-          <Route path="/employee_detail/:id" element={<EmployeeDetail />} />
+          <Route element={<PublicLayout />}>
+            <Route path="/" element={<Start />} />
+            <Route path="/adminlogin" element={<Login />} />
+            <Route path="/employee_login" element={<EmployeeLogin />} />
+          </Route>
+          <Route
+            path="/employee_detail/:id"
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <EmployeeDetail />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/dashboard"
             element={

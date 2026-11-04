@@ -4,22 +4,45 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import multer from "multer";
 import path from "path";
+import { rateLimit } from "express-rate-limit";
 
 const router = express.Router();
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { loginStatus: false, Error: "Too many sign-in attempts. Try again later." },
+});
+const cookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production" || process.env.COOKIE_SAME_SITE === "none",
+  sameSite: process.env.COOKIE_SAME_SITE || "strict",
+  maxAge: 24 * 60 * 60 * 1000,
+});
 
 // Middleware for auth (inline since circular import issue)
 const verifyUser = (req, res, next) => {
   const token = req.cookies.token;
   if (token) {
     jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-      if (err) return res.json({ Status: false, Error: "Wrong Token" });
+      if (err || decoded.role !== "employee") {
+        return res.status(401).json({ Status: false, Error: "Employee authentication required" });
+      }
       req.id = decoded.id;
       req.role = decoded.role;
       next();
     });
   } else {
-    return res.json({ Status: false, Error: "Not authenticated" });
+    return res.status(401).json({ Status: false, Error: "Employee authentication required" });
   }
+};
+
+const requireOwnEmployeeRecord = (req, res, next) => {
+  if (String(req.id) !== String(req.params.id)) {
+    return res.status(403).json({ Status: false, Error: "You can only access your own employee record" });
+  }
+  next();
 };
 
 // Image upload configuration
@@ -37,7 +60,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-router.post("/employee_login", (req, res) => {
+router.post("/employee_login", loginLimiter, (req, res) => {
+  if (!req.body?.email || !req.body?.password) {
+    return res.status(400).json({ loginStatus: false, Error: "Email and password are required" });
+  }
   const sql = `SELECT * FROM employee WHERE email = ?`;
   con.query(sql, [req.body.email], (err, result) => {
     if (err)
@@ -62,14 +88,10 @@ router.post("/employee_login", (req, res) => {
           const token = jwt.sign(
             { role: "employee", email: email, id: employee.id },
             process.env.JWT_SECRET,
-            { expiresIn: "1d" },
+            { expiresIn: process.env.JWT_EXPIRES_IN || "1d" },
           );
 
-          res.cookie("token", token, {
-            httpOnly: true,
-            secure: false,
-            sameSite: "strict",
-          });
+          res.cookie("token", token, cookieOptions());
           return res.json({ loginStatus: true, id: employee.id });
         } else {
           return res.json({ loginStatus: false, Error: "Wrong email or password" });
@@ -82,10 +104,13 @@ router.post("/employee_login", (req, res) => {
 });
 
 // Employee self-registration (pending approval)
-router.post("/register", (req, res) => {
+router.post("/register", loginLimiter, (req, res) => {
   const { full_name, email, password, salary, address, category_id, department_id } = req.body;
   if (!full_name || !email || !password || !category_id || !department_id) {
     return res.json({ Status: false, Error: "Missing required fields" });
+  }
+  if (password.length < 12) {
+    return res.status(400).json({ Status: false, Error: "Password must be at least 12 characters" });
   }
 
   bcrypt.hash(password, 10, (err, hash) => {
@@ -117,7 +142,7 @@ router.post("/register", (req, res) => {
 });
 
 // Detail
-router.get("/detail/:id", verifyUser, (req, res) => {
+router.get("/detail/:id", verifyUser, requireOwnEmployeeRecord, (req, res) => {
   const { id } = req.params;
   const sql = `SELECT e.*, d.name AS department_name
                FROM employee e
@@ -136,7 +161,7 @@ router.get("/detail/:id", verifyUser, (req, res) => {
 });
 
 // Leaves
-router.get("/leaves/:id", verifyUser, (req, res) => {
+router.get("/leaves/:id", verifyUser, requireOwnEmployeeRecord, (req, res) => {
   const { id } = req.params;
   const sql = `SELECT * FROM leaves WHERE employee_id = ? ORDER BY applied_date DESC`;
   con.query(sql, [id], (err, result) => {
@@ -148,8 +173,29 @@ router.get("/leaves/:id", verifyUser, (req, res) => {
   });
 });
 
+router.post("/leaves", verifyUser, (req, res) => {
+  const { leave_type, start_date, end_date, reason } = req.body;
+  if (!leave_type || !start_date || !end_date || !reason?.trim()) {
+    return res.status(400).json({ Status: false, Error: "All leave fields are required" });
+  }
+  if (new Date(end_date) < new Date(start_date)) {
+    return res.status(400).json({ Status: false, Error: "End date cannot be before start date" });
+  }
+
+  const sql = `INSERT INTO leaves
+    (employee_id, leave_type, start_date, end_date, reason, status, applied_date)
+    VALUES (?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)`;
+  con.query(sql, [req.id, leave_type, start_date, end_date, reason.trim()], (err) => {
+    if (err) {
+      console.error("Leave application error:", err);
+      return res.status(500).json({ Status: false, Error: "Could not submit leave application" });
+    }
+    return res.json({ Status: true, Message: "Leave applied successfully" });
+  });
+});
+
 // Salary
-router.get("/salary/:id", verifyUser, (req, res) => {
+router.get("/salary/:id", verifyUser, requireOwnEmployeeRecord, (req, res) => {
   const { id } = req.params;
   const sql = "SELECT salary FROM employee WHERE id = ?";
   con.query(sql, [id], (err, result) => {
@@ -165,7 +211,7 @@ router.get("/salary/:id", verifyUser, (req, res) => {
 });
 
 // Update employee profile
-router.put("/update/:id", verifyUser, (req, res) => {
+router.put("/update/:id", verifyUser, requireOwnEmployeeRecord, (req, res) => {
   const { id } = req.params;
   const { full_name, email, address, password } = req.body;
 
@@ -219,16 +265,13 @@ router.put("/update/:id", verifyUser, (req, res) => {
 
 // Logout
 router.get("/logout", (req, res) => {
-  res.clearCookie("token", {
-    httpOnly: true,
-    secure: false,
-    sameSite: "strict",
-  });
+  const { maxAge, ...clearOptions } = cookieOptions();
+  res.clearCookie("token", clearOptions);
   return res.json({ Status: true });
 });
 
 // Update profile image
-router.put("/update_profile_image/:id", verifyUser, upload.single("image"), (req, res) => {
+router.put("/update_profile_image/:id", verifyUser, requireOwnEmployeeRecord, upload.single("image"), (req, res) => {
   const { id } = req.params;
   
   if (!req.file) {
@@ -268,19 +311,19 @@ router.get("/attendance", verifyUser, (req, res) => {
 
 // Submit attendance
 router.post("/attendance", verifyUser, (req, res) => {
-  const { employee_id, date, clock_in_time, clock_out_time } = req.body;
-  if (!employee_id || !date || !clock_in_time) {
+  const { date, clock_in_time, clock_out_time } = req.body;
+  if (!date || !clock_in_time) {
     return res.json({ Status: false, Error: "Missing required fields" });
   }
 
   const sql = `
     INSERT INTO attendance (employee_id, date, clock_in_time, clock_out_time, status) 
     VALUES (?, ?, ?, ?, 'pending')
-    ON DUPLICATE KEY UPDATE 
-      clock_out_time = VALUES(clock_out_time),
+    ON CONFLICT (employee_id, date) DO UPDATE SET
+      clock_out_time = EXCLUDED.clock_out_time,
       status = 'pending'
   `;
-  const values = [employee_id, date, clock_in_time, clock_out_time || null];
+  const values = [req.id, date, clock_in_time, clock_out_time || null];
 
   con.query(sql, values, (err, result) => {
     if (err) {
