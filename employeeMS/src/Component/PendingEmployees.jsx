@@ -6,7 +6,10 @@ const PendingEmployees = () => {
 
   const fetchPending = () => {
     axios
-      .get("http://localhost:3000/auth/pending_employees", { withCredentials: true })
+      .get("http://localhost:3000/pending_employees", {
+        params: { limit: 20, offset: 0 },
+        withCredentials: true,
+      })
       .then((res) => {
         if (res.data.Status) {
           setPending(res.data.Result || []);
@@ -16,6 +19,7 @@ const PendingEmployees = () => {
       })
       .catch((err) => console.log(err));
   };
+
 
   useEffect(() => {
     fetchPending();
@@ -72,6 +76,7 @@ const PendingEmployees = () => {
               <th className="px-4 py-3 rounded-l-lg">Name</th>
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Category</th>
+              <th className="px-4 py-3">Department</th>
               <th className="px-4 py-3">Salary</th>
               <th className="px-4 py-3">Address</th>
               <th className="px-4 py-3 rounded-r-lg text-right">Action</th>
@@ -80,7 +85,7 @@ const PendingEmployees = () => {
           <tbody>
             {pending.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
                   No pending employee registrations
                 </td>
               </tr>
@@ -90,6 +95,7 @@ const PendingEmployees = () => {
                   <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{e.full_name}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.email}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.category_name}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.department_name || "Unassigned"}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.salary}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.address}</td>
                   <td className="px-4 py-3 text-right whitespace-nowrap space-x-2">
@@ -117,4 +123,3 @@ const PendingEmployees = () => {
 };
 
 export default PendingEmployees;
-

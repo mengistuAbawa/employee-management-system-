@@ -6,45 +6,65 @@ const EditEmployee = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [category, setCategory] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [employee, setEmployee] = useState({
     full_name: "",
     email: "",
     salary: "",
     address: "",
     category_id: "",
+    department_id: "",
   });
 
   useEffect(() => {
-    axios.get("http://localhost:3000/auth/category", { withCredentials: true })
-      .then((result) => {
-        if (result.data.Status) setCategory(result.data.Result);
-      })
-      .catch((err) => console.log(err));
+    const fetchData = async () => {
+      try {
+        const categoryRes = await axios.get("http://localhost:3000/auth/category", { withCredentials: true });
+        if (categoryRes.data.Status) setCategory(categoryRes.data.Result);
+        const departmentRes = await axios.get("http://localhost:3000/auth/department", { withCredentials: true });
+        if (departmentRes.data.Status) setDepartments(departmentRes.data.Result);
 
-    axios.get(`http://localhost:3000/auth/employee/${id}`, { withCredentials: true })
-      .then((result) => {
-        if (result.data.Status) {
-          const data = result.data.Result[0];
+        const employeeRes = await axios.get(`http://localhost:3000/auth/employee/${id}`, { withCredentials: true });
+        if (employeeRes.data.Status) {
+          const data = employeeRes.data.Result[0];
           setEmployee({
             full_name: data.full_name,
             email: data.email,
             address: data.address,
             salary: data.salary,
             category_id: data.category_id,
+            department_id: data.department_id || "",
           });
         }
-      })
-      .catch((err) => console.log(err));
+      } catch (err) {
+        console.log(err);
+      }
+    };
+
+    fetchData();
   }, [id]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    axios.put(`http://localhost:3000/auth/edit_employee/${id}`, employee, { withCredentials: true })
-      .then((result) => {
-        if (result.data.Status) navigate("/dashboard/employee");
-        else alert(result.data.Error);
-      })
-      .catch((err) => console.log(err));
+    try {
+      const result = await axios.put(
+        `http://localhost:3000/edit_employee/${id}`,
+        {
+          full_name: employee.full_name,
+          email: employee.email,
+          salary: employee.salary,
+          address: employee.address,
+          category_id: employee.category_id,
+          department_id: employee.department_id,
+        },
+        { withCredentials: true }
+      );
+
+      if (result.data.Status) navigate("/dashboard/employee");
+      else alert(result.data.Error);
+    } catch (err) {
+      console.log(err);
+    }
   };
 
   return (
@@ -77,6 +97,15 @@ const EditEmployee = () => {
               ))}
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Department</label>
+            <select className="input-field" value={employee.department_id} required onChange={(e) => setEmployee({ ...employee, department_id: e.target.value })}>
+              <option value="">Select Department</option>
+              {departments.map((department) => (
+                <option key={department.id} value={department.id}>{department.name}</option>
+              ))}
+            </select>
+          </div>
           <button type="submit" className="btn-success w-full">Update Employee</button>
         </form>
       </div>
@@ -85,4 +114,3 @@ const EditEmployee = () => {
 };
 
 export default EditEmployee;
-

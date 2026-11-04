@@ -45,6 +45,7 @@ const EmployeeDashboard = () => {
       .then((result) => {
         if (result.data.Status) {
           localStorage.removeItem("valid");
+          localStorage.removeItem("role");
           localStorage.removeItem("employeeId");
           navigate("/");
         }
@@ -154,4 +155,3 @@ const EmployeeDashboard = () => {
 };
 
 export default EmployeeDashboard;
-

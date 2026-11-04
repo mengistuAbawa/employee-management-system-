@@ -2,7 +2,25 @@ import express from "express";
 import con from "../utils/db.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import multer from "multer";
+import path from "path";\nimport { verifyUser } from "../index.js";
+
 const router = express.Router();
+
+// Image upload configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "public/images");
+  },
+  filename: (req, file, cb) => {
+    cb(
+      null,
+      file.fieldname + "_" + Date.now() + path.extname(file.originalname),
+    );
+  },
+});
+
+const upload = multer({ storage: storage });
 router.post("/employee_login", (req, res) => {
   const sql = `SELECT * FROM employee WHERE email = ?`;
   con.query(sql, [req.body.email], (err, result) => {
@@ -23,7 +41,7 @@ router.post("/employee_login", (req, res) => {
         if (err)
           return res.json({ loginStatus: false, Error: "Comparison error" });
 
-if (response) {
+        if (response) {
           const email = employee.email;
           const token = jwt.sign(
             { role: "employee", email: email, id: employee.id },
@@ -81,8 +99,8 @@ router.post("/register", (req, res) => {
   });
 });
 
-router.get("/detail/:id", (req, res) => {
-  const { id } = req.params; // correct destructuring
+router.get("/detail/:id", verifyUser, (req, res) => {
+  const { id } = req.params;
   const sql = "SELECT * FROM employee WHERE id = ?";
 
   con.query(sql, [id], (err, result) => {
@@ -90,7 +108,6 @@ router.get("/detail/:id", (req, res) => {
       console.error("Database error:", err);
       return res.status(500).json({ Status: false, Error: "Query Error" });
     }
-    // If no rows returned, employee not found
     if (!result || result.length === 0) {
       return res
         .status(404)
@@ -100,8 +117,7 @@ router.get("/detail/:id", (req, res) => {
   });
 });
 
-// Get employee's own leaves
-router.get("/leaves/:id", (req, res) => {
+// Get employee's own leaves\nrouter.get("/leaves/:id", verifyUser, (req, res) => {
   const { id } = req.params;
   const sql = `SELECT * FROM leaves WHERE employee_id = ? ORDER BY applied_date DESC`;
   con.query(sql, [id], (err, result) => {
@@ -113,8 +129,7 @@ router.get("/leaves/:id", (req, res) => {
   });
 });
 
-// Get employee salary
-router.get("/salary/:id", (req, res) => {
+// Get employee salary\nrouter.get("/salary/:id", verifyUser, (req, res) => {
   const { id } = req.params;
   const sql = "SELECT salary FROM employee WHERE id = ?";
   con.query(sql, [id], (err, result) => {
@@ -134,7 +149,6 @@ router.put("/update/:id", (req, res) => {
   const { id } = req.params;
   const { full_name, email, address, password } = req.body;
 
-  // Build dynamic update based on provided fields
   const fields = [];
   const values = [];
 
@@ -191,6 +205,53 @@ router.get("/logout", (req, res) => {
     sameSite: "strict",
   });
   return res.json({ Status: true });
+});
+
+// Update employee profile image
+router.put("/update_profile_image/:id", upload.single("image"), (req, res) => {
+  const { id } = req.params;
+  
+  if (!req.file) {
+    return res.json({ Status: false, Error: "No image file uploaded" });
+  }
+
+  const imageFilename = req.file.filename;
+
+  const sql = "UPDATE employee SET image = ? WHERE id = ?";
+
+  con.query(sql, [imageFilename, id], (err, result) => {
+    if (err) {
+      console.error("Error updating image:", err);
+      return res.json({ Status: false, Error: "Error updating profile image" });
+    }
+
+    return res.json({ Status: true, Message: "Profile image updated successfully", image: imageFilename });
+  });
+});
+
+// Submit attendance
+router.post("/attendance", (req, res) => {
+  const { employee_id, date, clock_in_time, clock_out_time } = req.body;
+  if (!employee_id || !date || !clock_in_time) {
+    return res.json({ Status: false, Error: "Missing required fields: employee_id, date, clock_in_time" });
+  }
+
+  const sql = `
+    INSERT INTO attendance (employee_id, date, clock_in_time, clock_out_time, status) 
+    VALUES (?, ?, ?, ?, 'pending')
+    ON DUPLICATE KEY UPDATE 
+      clock_out_time = VALUES(clock_out_time),
+      status = 'pending'
+  `;
+  const values = [employee_id, date, clock_in_time, clock_out_time || null];
+
+  con.query(sql, values, (err, result) => {
+    if (err) {
+      console.error("Attendance error:", err);
+      return res.json({ Status: false, Error: err.message || "Database error" });
+    }
+    return res.json({ Status: true, Message: "Attendance submitted successfully" });
+  });
 });
 
 export { router as EmployeeRouter };

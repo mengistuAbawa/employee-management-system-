@@ -10,8 +10,7 @@ const Category = () => {
   }, []);
 
   const fetchCategories = () => {
-    axios
-      .get("http://localhost:3000/auth/category", { withCredentials: true })
+axios.get("http://localhost:3000/category", { withCredentials: true })
       .then((result) => {
         if (result.data.Status) setCategory(result.data.Result);
         else alert(result.data.Error);
@@ -22,7 +21,7 @@ const Category = () => {
   const handleDelete = (ID) => {
     if (window.confirm("Are you sure you want to delete this category?")) {
       axios
-        .delete(`http://localhost:3000/auth/delete_category/${ID}`, { withCredentials: true })
+        .delete(`http://localhost:3000/delete_category/${ID}`, { withCredentials: true })
         .then((res) => {
           if (res.data.Status) fetchCategories();
           else alert(res.data.Error);

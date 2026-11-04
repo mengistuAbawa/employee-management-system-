@@ -5,6 +5,7 @@ import { useTheme } from "../ThemeContext";
 
 const Login = () => {
   const [isRegister, setIsRegister] = useState(false);
+  const [role, setRole] = useState("admin"); // 'admin' or 'employee'
   const [values, setValues] = useState({
     email: "",
     password: "",
@@ -23,39 +24,55 @@ const Login = () => {
         setError("All fields are required");
         return;
       }
+
       axios
-        .post("http://localhost:3000/auth/add_admin", values, {
-          withCredentials: true,
-        })
+        .post("http://localhost:3000/add_admin", values, { withCredentials: true })
         .then((result) => {
           if (result.data.Status) {
             setIsRegister(false);
             setError("Account created! Please log in.");
             setValues({ email: "", password: "", full_name: "" });
           } else {
-            setError(result.data.Error);
+            setError(result.data.Error || "Registration failed.");
           }
         })
         .catch((err) => {
-          console.log(err);
-          setError("An error occurred. Please try again.");
+          console.error("Registration Error Context:", err);
+          setError(
+            err.response?.data?.Error ||
+              "Connection failed. Ensure your backend server is running."
+          );
         });
     } else {
+      // Dynamically target either admin or employee login endpoint
+      const endpoint = role === "admin" 
+        ? "http://localhost:3000/adminlogin" 
+        : "http://localhost:3000/employee/employee_login";
+
       axios
-        .post("http://localhost:3000/auth/adminlogin", values, {
-          withCredentials: true,
-        })
+        .post(endpoint, values, { withCredentials: true })
         .then((result) => {
           if (result.data.loginStatus) {
             localStorage.setItem("valid", "true");
-            navigate("/dashboard");
+            localStorage.setItem("role", role);
+            
+            if (role === "admin") {
+              localStorage.removeItem("employeeId");
+              navigate("/dashboard");
+            } else {
+              localStorage.setItem("employeeId", result.data.id);
+              navigate("/employee/dashboard");
+            }
           } else {
-            setError(result.data.Error);
+            setError(result.data.Error || "Invalid credentials.");
           }
         })
         .catch((err) => {
-          console.log(err);
-          setError("An error occurred. Please try again.");
+          console.error("Login Error Context:", err);
+          setError(
+            err.response?.data?.Error ||
+              "Connection failed. Ensure your backend server is running."
+          );
         });
     }
   };
@@ -77,12 +94,44 @@ const Login = () => {
       </div>
 
       <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 transition-colors">
-        <h2 className="text-2xl font-bold text-center text-gray-800 dark:text-white mb-6">
-          {isRegister ? "Create Admin Account" : "Admin Login"}
+        <h2 className="text-2xl font-bold text-center text-gray-800 dark:text-white mb-2">
+          {isRegister ? "Create Admin Account" : `${role === "admin" ? "Admin" : "Employee"} Login`}
         </h2>
 
+        {/* Role Selector Toggles (Hidden when Registering since we only register Admins here) */}
+        {!isRegister && (
+          <div className="flex justify-center gap-4 mb-6 mt-2">
+            <button
+              type="button"
+              onClick={() => { setRole("admin"); setError(null); }}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                role === "admin" 
+                  ? "bg-blue-600 text-white shadow-md" 
+                  : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+              }`}
+            >
+              Admin
+            </button>
+            <button
+              type="button"
+              onClick={() => { setRole("employee"); setError(null); }}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                role === "employee" 
+                  ? "bg-blue-600 text-white shadow-md" 
+                  : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+              }`}
+            >
+              Employee
+            </button>
+          </div>
+        )}
+
         {error && (
-          <div className={`mb-4 p-3 rounded-lg text-sm ${error.includes("created") || error.includes("successful") ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200" : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200"}`}>
+          <div className={`mb-4 p-3 rounded-lg text-sm ${
+            error.includes("created") || error.includes("successful")
+              ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200"
+              : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200"
+          }`}>
             {error}
           </div>
         )}
@@ -90,76 +139,66 @@ const Login = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {isRegister && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                Full Name
-              </label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Full Name</label>
               <input
                 type="text"
-                className="input-field"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 placeholder="Enter your full name"
                 required={isRegister}
+                value={values.full_name}
                 onChange={(e) => setValues({ ...values, full_name: e.target.value })}
               />
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-              Email
-            </label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Email</label>
             <input
               type="email"
-              className="input-field"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               placeholder="Enter your email"
               required
+              value={values.email}
               onChange={(e) => setValues({ ...values, email: e.target.value })}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-              Password
-            </label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Password</label>
             <input
               type="password"
-              className="input-field"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               placeholder="Enter password"
               required
+              value={values.password}
               onChange={(e) => setValues({ ...values, password: e.target.value })}
             />
           </div>
 
-          {!isRegister && (
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="tick" className="h-4 w-4 text-blue-600 rounded border-gray-300" required />
-              <label htmlFor="tick" className="text-sm text-gray-600 dark:text-gray-300">
-                Agree with terms & conditions
-              </label>
-            </div>
-          )}
-
-          <button type="submit" className="w-full btn-primary py-2.5 font-semibold">
+          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-semibold shadow-md transition-colors">
             {isRegister ? "Create Account" : "Log In"}
           </button>
         </form>
 
-        <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-300">
-          {isRegister ? "Already have an account?" : "Don't have an account?"}{" "}
-          <button
-            type="button"
-            onClick={() => {
-              setIsRegister(!isRegister);
-              setError(null);
-            }}
-            className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
-          >
-            {isRegister ? "Log In" : "Create Account"}
-          </button>
-        </p>
+        {/* Only allow registration toggle if role is set to Admin */}
+        {role === "admin" && (
+          <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-300">
+            {isRegister ? "Already have an account?" : "Don't have an account?"}{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegister(!isRegister);
+                setError(null);
+              }}
+              className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
+            >
+              {isRegister ? "Log In" : "Create Account"}
+            </button>
+          </p>
+        )}
       </div>
     </div>
   );
 };
 
 export default Login;
-

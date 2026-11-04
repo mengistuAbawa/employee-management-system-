@@ -22,7 +22,10 @@ const Employee = () => {
 
   const fetchEmployees = () => {
     axios
-      .get("http://localhost:3000/auth/employee", { withCredentials: true })
+      .get("http://localhost:3000/employee", {
+        params: { limit: 20, offset: 0 },
+        withCredentials: true,
+      })
       .then((result) => {
         if (result.data.Status) {
           setEmployees(result.data.Result);
@@ -45,7 +48,7 @@ const Employee = () => {
       return;
     }
     axios
-      .post("http://localhost:3000/employee/employee_login", { email: employees.find(e => e.id === loggingIn)?.email, password: loginPassword }, { withCredentials: true })
+        .post("http://localhost:3000/employee/employee_login", { email: employees.find(e => e.id === loggingIn)?.email, password: loginPassword }, { withCredentials: true })
       .then((result) => {
         if (result.data.loginStatus) {
           localStorage.setItem("valid", "true");
@@ -70,7 +73,7 @@ const Employee = () => {
   const handleDelete = (id) => {
     if (window.confirm("Are you sure you want to delete this employee?")) {
       axios
-        .delete(`http://localhost:3000/auth/delete_employee/${id}`, { withCredentials: true })
+        .delete("http://localhost:3000/delete_employee")
         .then((res) => {
           if (res.data.Status) {
             fetchEmployees();
@@ -138,6 +141,7 @@ return (
               <th className="px-4 py-3">Salary</th>
               <th className="px-4 py-3">Address</th>
               <th className="px-4 py-3">Category</th>
+              <th className="px-4 py-3">Department</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 rounded-r-lg text-right">Action</th>
             </tr>
@@ -157,13 +161,14 @@ return (
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.salary}</td>
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.address}</td>
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.category_name}</td>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.department_name || "Unassigned"}</td>
                 <td className="px-4 py-3">{getStatusBadge(e.approval_status)}</td>
 <td className="px-4 py-3 text-right whitespace-nowrap space-x-1">
                   <Link to={`/dashboard/edit_employee/${e.id}`} className="inline-block px-2 py-1 text-xs font-medium rounded bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-200 hover:bg-cyan-200 dark:hover:bg-cyan-800">Edit</Link>
                   <button onClick={() => handleLogin(e)} className="inline-block px-2 py-1 text-xs font-medium rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200 hover:bg-indigo-200 dark:hover:bg-indigo-800">Login</button>
                   <button onClick={() => handleDelete(e.id)} className="inline-block px-2 py-1 text-xs font-medium rounded bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-800">Delete</button>
                   <Link to={`/dashboard/add_leave/${e.id}`} className="inline-block px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800">Leave</Link>
-                  <Link to={`/dashboard/salary`} className="inline-block px-2 py-1 text-xs font-medium rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-800">Salary</Link>
+                  <Link to={`/employee/dashboard/payroll`} className="inline-block px-2 py-1 text-xs font-medium rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-800">Salary</Link>
                 </td>
               </tr>
             ))}
@@ -175,4 +180,3 @@ return (
 };
 
 export default Employee;
-

@@ -13,7 +13,7 @@ const AddAdmin = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await axios.post("http://localhost:3000/auth/add_admin", form, { withCredentials: true });
+http://localhost:3000/add_admin
       if (res.data?.Status) navigate("/dashboard");
       else alert(res.data?.Error || "Add failed");
     } catch (err) {

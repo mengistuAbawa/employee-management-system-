@@ -58,7 +58,7 @@ const Leave = () => {
       }
     } catch (err) {
       console.error(err);
-      alert("Error adding leave");
+      alert(err.response?.data?.Error || err.response?.data?.message || "Error adding leave");
     } finally {
       setLoading(false);
     }
@@ -196,4 +196,3 @@ const Leave = () => {
 };
 
 export default Leave;
-

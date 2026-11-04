@@ -12,69 +12,81 @@ const EmployeeLogin = () => {
     salary: "",
     address: "",
     category_id: "",
+    department_id: "",
   });
   const [categories, setCategories] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [error, setError] = useState(null);
+
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
-    if (isRegister) {
-      axios
-        .get("http://localhost:3000/auth/category", { withCredentials: true })
-        .then((res) => {
-          if (res.data.Status) {
-            setCategories(res.data.Result || []);
-          }
-        })
-        .catch((err) => console.log(err));
-    }
+    if (!isRegister) return;
+
+    Promise.all([
+      axios.get("http://localhost:3000/category", { withCredentials: true }),
+      axios.get("http://localhost:3000/auth/department", { withCredentials: true }),
+    ])
+      .then(([categoryResponse, departmentResponse]) => {
+        if (categoryResponse.data.Status) setCategories(categoryResponse.data.Result || []);
+        if (departmentResponse.data.Status) setDepartments(departmentResponse.data.Result || []);
+      })
+      .catch((err) => console.log(err));
   }, [isRegister]);
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     setError(null);
 
-    if (isRegister) {
-      if (!values.full_name || !values.email || !values.password || !values.category_id) {
-        setError("All fields except salary/address are required");
+    try {
+      if (isRegister) {
+        if (
+          !values.full_name ||
+          !values.email ||
+          !values.password ||
+          !values.category_id ||
+          !values.department_id
+        ) {
+          setError("All fields except salary/address are required");
+          return;
+        }
+
+        const result = await axios.post(
+          "http://localhost:3000/employee/register",
+          values,
+          { withCredentials: true }
+        );
+
+        if (result.data.Status) {
+          setIsRegister(false);
+          setError(result.data.Message);
+          setValues({ email: "", password: "", full_name: "", salary: "", address: "", category_id: "", department_id: "" });
+        } else {
+          setError(result.data.Error);
+        }
         return;
       }
-      axios
-        .post("http://localhost:3000/employee/register", values, {
-          withCredentials: true,
-        })
-        .then((result) => {
-          if (result.data.Status) {
-            setIsRegister(false);
-            setError(result.data.Message);
-            setValues({ email: "", password: "", full_name: "", salary: "", address: "", category_id: "" });
-          } else {
-            setError(result.data.Error);
-          }
-        })
-        .catch((err) => {
-          console.log(err);
-          setError("An error occurred. Please try again.");
-        });
-} else {
-      axios
-        .post("http://localhost:3000/employee/employee_login", values, {
-          withCredentials: true,
-        })
-        .then((result) => {
-          if (result.data.loginStatus) {
-            localStorage.setItem("valid", "true");
-            localStorage.setItem("employeeId", result.data.id);
-            navigate("/employee/dashboard");
-          } else {
-            setError(result.data.Error);
-          }
-        })
-        .catch((err) => {
-          console.log(err);
-          setError("An error occurred. Please try again.");
-        });
+
+      const result = await axios.post(
+        "http://localhost:3000/employee/employee_login",
+        values,
+        { withCredentials: true }
+      );
+
+      if (result.data.loginStatus) {
+        localStorage.setItem("valid", "true");
+        localStorage.setItem("role", "employee");
+        localStorage.setItem("employeeId", result.data.id);
+        navigate("/employee/dashboard");
+      } else {
+        setError(result.data.Error);
+      }
+    } catch (err) {
+      console.log(err);
+      setError(
+        err.response?.data?.Error || "Connection failed. Ensure your backend server is running."
+      );
     }
   };
 
@@ -129,6 +141,20 @@ const EmployeeLogin = () => {
                   <option value="">Select Category</option>
                   {categories.map((cat) => (
                     <option key={cat.ID ?? cat.id} value={cat.ID ?? cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Department</label>
+                <select
+                  className="input-field"
+                  required={isRegister}
+                  onChange={(e) => setValues({ ...values, department_id: e.target.value })}
+                  value={values.department_id}
+                >
+                  <option value="">Select Department</option>
+                  {departments.map((department) => (
+                    <option key={department.id} value={department.id}>{department.name}</option>
                   ))}
                 </select>
               </div>
@@ -199,4 +225,3 @@ const EmployeeLogin = () => {
 };
 
 export default EmployeeLogin;
-

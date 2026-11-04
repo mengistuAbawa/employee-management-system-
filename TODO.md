@@ -1,46 +1,7 @@
-# TODO - Complete Code Status
+- [x] Diagnose why Admin → Attendance Control page not displaying (route exists; likely DB/schema issue).
+- [x] Inspect attendance SQL + DB connection.
+- [x] Fix: add `USE employees;` to `server/utils/add_attendance_table.sql` so attendance table is created in the same DB your app connects to.
+- [ ] Re-run `server/utils/add_attendance_table.sql` (and/or `server/utils/init_database.sql`) in MySQL.
+- [ ] Verify `GET http://localhost:3000/attendances` returns Status:true.
+- [ ] Re-test UI: click “Attendance Control” in admin dashboard.
 
-## Issues & Fixes - All Completed ✅
-
-### 1. Logout Not Working
-- **Problem**: Dashboard.jsx uses `axios.get()` but server route is POST
-- **Fix**: Changed to `axios.post()` in Dashboard.jsx
-- **Status**: DONE ✅
-
-### 2. Theme Not Persisting After Login
-- **Problem**: ThemeContext.jsx loads from localStorage but may not apply on first render
-- **Fix**: Added useEffect to apply theme on mount
-- **Status**: DONE ✅
-
-### 3. Login Errors
-- **Problem**: CORS/cookie configuration
-- **Fix**: Verified server CORS config includes client origin
-- **Status**: DONE ✅
-
-### Additional Fixes Applied:
-- Fixed cookie configuration in EmployeeRoute.js (proper httpOnly, secure, sameSite settings)
-- Fixed logout cookie clearing to match create cookie settings
-- Updated EmployeeLogin to save employeeId in localStorage
-- Added 127.0.0.1:5173 to CORS origins
-
-## Code Completeness Status - VERIFIED ✅
-
-### Features Implemented:
-- Admin Login/Registration ✅
-- Employee Login/Registration (with approval workflow) ✅
-- Admin Dashboard ✅
-- Employee Dashboard ✅
-- Employee Management (CRUD) ✅
-- Category Management (CRUD) ✅
-- Admin Management (CRUD) ✅
-- Leave Management ✅
-- Salary View ✅
-- Theme Toggle (Light/Dark) ✅
-- Profile Management ✅
-- Pending Employees Approval ✅
-
-### All Routes Working:
-- /auth/adminlogin (POST) ✅
-- /auth/logout (POST) ✅
-- /employee/employee_login (POST) ✅
-- /employee/logout (GET) ✅

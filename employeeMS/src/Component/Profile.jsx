@@ -3,7 +3,10 @@ import axios from "axios";
 import profile from "./Image/profile.jpg";
 
 const Profile = () => {
-  const [admin, setAdmin] = useState({ full_name: "", email: "", image: null });
+  const [admin, setAdmin] = useState({ id: null, full_name: "", email: "", image: null });
+  const [showAdminEdit, setShowAdminEdit] = useState(false);
+  const [editForm, setEditForm] = useState({ full_name: "", email: "" });
+
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
@@ -19,9 +22,10 @@ const Profile = () => {
         console.log("Profile response:", res.data);
         if (res.data.Status) {
           setAdmin({
+            id: res.data.id ?? null,
             full_name: res.data.full_name || "Admin",
             email: res.data.email || "",
-            image: res.data.image || null
+            image: res.data.image || null,
           });
         } else {
           console.error("Error fetching profile:", res.data.Error);
@@ -90,6 +94,31 @@ const Profile = () => {
 
   if (loading) return <div className="text-center mt-10 text-gray-600 dark:text-gray-300">Loading...</div>;
 
+  const handleAdminSave = async () => {
+    if (!admin.id) {
+      alert("Admin id not found");
+      return;
+    }
+
+    try {
+      const res = await axios.put(
+        `http://localhost:3000/auth/edit_admin/${admin.id}`,
+        { full_name: editForm.full_name, email: editForm.email },
+        { withCredentials: true }
+      );
+
+      if (res.data?.Status) {
+        setShowAdminEdit(false);
+        fetchProfile();
+      } else {
+        alert("Error: " + (res.data?.Error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update profile");
+    }
+  };
+
   return (
     <div className="flex justify-center">
       <div className="card w-full max-w-md text-center">
@@ -116,11 +145,108 @@ const Profile = () => {
               disabled={uploading}
             />
           </label>
+          <label className="absolute bottom-0 left-[calc(50%-3.25rem)] translate-y-2 bg-gray-800 text-white px-2 py-1 rounded-full cursor-pointer hover:bg-gray-700 transition-colors text-xs">
+            Camera
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                handleImageChange(e);
+                handleImageUpload(e);
+              }}
+              disabled={uploading}
+            />
+          </label>
         </div>
         {uploading && <p className="text-sm text-blue-500 mb-2">Uploading...</p>}
-        <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200">{admin.full_name}</h5>
-        <p className="text-gray-500 dark:text-gray-400">{admin.email}</p>
+
+        <div className="relative group mt-2">
+          <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200">{admin.full_name}</h5>
+          <p className="text-gray-500 dark:text-gray-400">{admin.email}</p>
+
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-9 right-0">
+            <button
+              type="button"
+              onClick={() => {
+                setEditForm({ full_name: admin.full_name || "", email: admin.email || "" });
+                setShowAdminEdit(true);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-md"
+            >
+              Edit
+            </button>
+          </div>
+        </div>
+
       </div>
+
+      {showAdminEdit && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setShowAdminEdit(false)}
+        >
+          <div className="card w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+            <h4 className="text-lg font-bold text-gray-800 dark:text-white mb-4">
+              Edit Profile
+            </h4>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleAdminSave();
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  className="input-field w-full"
+                  value={editForm.full_name}
+                  onChange={(e) => setEditForm((p) => ({ ...p, full_name: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  className="input-field w-full"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdminEdit(false)}
+                  className="btn-primary flex-1 bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="btn-primary flex-1"
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

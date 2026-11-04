@@ -26,7 +26,13 @@ import EmployeeMyLeaves from "./Component/EmployeeMyLeaves";
 import EmployeePayroll from "./Component/EmployeePayroll";
 import EmployeeSettings from "./Component/EmployeeSettings";
 import PendingEmployees from "./Component/PendingEmployees";
+import Department from "./Component/Department";
+import AddDepartment from "./Component/AddDepartment";
+import EditDepartment from "./Component/EditDepartment";
+import HelpSupport from "./Component/HelpSupport";
 import ProtectedRoute from "./Component/ProtectedRoute";
+import AttendanceControl from "./Component/AttendanceControl";
+
 
 function App() {
   return (
@@ -40,15 +46,15 @@ function App() {
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="admin">
                 <Dashboard />
               </ProtectedRoute>
             }
           >
+            <Route path="profile" element={<Profile />} />
             <Route index element={<Home />} />
             <Route path="employee" element={<Employee />} />
             <Route path="category" element={<Category />} />
-            <Route path="profile" element={<Profile />} />
             <Route path="add_category" element={<AddCategory />} />
             <Route path="add_employee" element={<AddEmployee />} />
             <Route path="add_admin" element={<AddAdmin />} />
@@ -56,15 +62,21 @@ function App() {
             <Route path="leaves" element={<Leave />} />
             <Route path="add_leave/:id" element={<AddLeave />} />
             <Route path="salary" element={<Salary />} />
+            <Route path="payroll" element={<EmployeePayroll />} />
             <Route path="edit_employee/:id" element={<EditEmployee />} />
             <Route path="edit_category/:id" element={<EditCategory />} />
             <Route path="edit_admin/:id" element={<EditAdmin />} />
             <Route path="pending_employees" element={<PendingEmployees />} />
+            <Route path="department" element={<Department />} />
+            <Route path="department/add" element={<AddDepartment />} />
+            <Route path="department/edit/:id" element={<EditDepartment />} />
+            <Route path="help-support" element={<HelpSupport />} />
+            <Route path="attendance" element={<AttendanceControl />} />
           </Route>
           <Route
             path="/employee/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="employee">
                 <EmployeeDashboard />
               </ProtectedRoute>
             }
@@ -82,3 +94,4 @@ function App() {
 }
 
 export default App;
+// when employee is select attendance checkin or checkout  it must be recorded in admin dashboard to manage the employee s

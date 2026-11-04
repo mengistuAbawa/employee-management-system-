@@ -9,7 +9,7 @@ const EditCategory = () => {
 
   useEffect(() => {
     axios
-      .get(`http://localhost:3000/auth/category/${id}`, { withCredentials: true })
+      .get(`http://localhost:3000/category/${id}`, { withCredentials: true })
       .then((result) => {
         if (result.data.Status) setCategory({ name: result.data.Result[0].name });
         else alert(result.data.Error);
@@ -20,7 +20,7 @@ const EditCategory = () => {
   const handleSubmit = (e) => {
     e.preventDefault();
     axios
-      .put(`http://localhost:3000/auth/edit_category/${id}`, { name: category.name }, { withCredentials: true })
+      .put(`http://localhost:3000/edit_category/${id}`, { name: category.name }, { withCredentials: true })
       .then((result) => {
         if (result.data.Status) navigate("/dashboard/category");
         else alert(result.data.Error);

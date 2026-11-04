@@ -1,10 +1,13 @@
 import express from "express";
-
 import con from "../utils/db.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import multer from "multer";
 import path from "path";
+
+// Socket.io emitters (optional, only if server index exposes `io`)
+import { emitEmployeeCountUpdated, emitPendingEmployeesUpdated } from "../socket/dashboardEmitter.js";
+
 
 const router = express.Router();
 //to check if admin is logged in or not
@@ -23,7 +26,13 @@ router.post("/adminlogin", (req, res) => {
         if (err)
           return res.status(500).json({ loginStatus: false, Error: "Comparison error" });
 
-if (response) {
+        if (response) {
+          if (!process.env.JWT_SECRET) {
+            return res.status(500).json({
+              loginStatus: false,
+              Error: "Server misconfiguration: JWT_SECRET is missing",
+            });
+          }
           const email = result[0].email;
           const token = jwt.sign(
             { role: "admin", email: email, id: result[0].id },
@@ -79,6 +88,16 @@ router.delete("/delete_category/:ID", (req, res) => {
   });
 });
 
+// GET single category for edit
+router.get("/category/:id", (req, res) => {
+  const sql = "SELECT * FROM category WHERE ID = ?";
+  con.query(sql, [req.params.id], (err, result) => {
+    if (err) return res.json({ Status: false, Error: err });
+    if (result.length === 0) return res.json({ Status: false, Error: "Category not found" });
+    return res.json({ Status: true, Result: result });
+  });
+});
+
 //for editing category PUT () use to update the rows or values
 router.put("/edit_category/:ID", (req, res) => {
   const ID = req.params.ID;
@@ -94,6 +113,7 @@ router.put("/edit_category/:ID", (req, res) => {
     return res.json({ Status: true });
   });
 });
+
 // Storage configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -108,36 +128,144 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// Employee Routes
+// Employee Routes (supports pagination)
+// Query params: limit, offset, search
 router.get("/employee", (req, res) => {
-  const sql =
-    "SELECT e.*, c.name as category_name FROM employee e JOIN category c ON e.category_id = c.id";
-  con.query(sql, (err, result) => {
-    if (err) return res.json({ Status: false, Error: "Query Error" });
-    return res.json({ Status: true, Result: result });
+  const limit = Math.max(parseInt(req.query.limit || "20", 10), 1);
+  const offset = Math.max(parseInt(req.query.offset || "0", 10), 0);
+  const search = (req.query.search || "").trim();
+
+  const whereClause = search
+    ? "WHERE (e.full_name LIKE ? OR e.email LIKE ?)"
+    : "";
+
+  const sqlCount = `SELECT COUNT(*) as total
+                     FROM employee e
+                     ${whereClause}`;
+
+  const sql = `SELECT e.*, c.name as category_name, d.name as department_name
+               FROM employee e 
+               JOIN category c ON e.category_id = c.id 
+               LEFT JOIN department d ON e.department_id = d.id
+               ${whereClause}
+               ORDER BY e.id DESC
+               LIMIT ? OFFSET ?`;
+
+  const countParams = search ? [`%${search}%`, `%${search}%`] : [];
+  const sqlParams = [...countParams, limit, offset];
+
+  con.query(sqlCount, countParams, (err, countResult) => {
+    if (err) return res.json({ Status: false, Error: err });
+
+    con.query(sql, sqlParams, (err2, result) => {
+      if (err2) return res.json({ Status: false, Error: err2 });
+      const total = countResult?.[0]?.total ?? 0;
+      return res.json({
+        Status: true,
+        Result: result,
+        Meta: { total, limit, offset },
+      });
+    });
   });
 });
 
-// Get pending employees
-router.get("/pending_employees", (req, res) => {
-  const sql = `SELECT e.*, c.name as category_name 
+// Alias for frontend pages that call /auth/employee (ex: Admin Leave page)
+router.get("/auth/employee", (req, res) => {
+  const limit = Math.max(parseInt(req.query.limit || "20", 10), 1);
+  const offset = Math.max(parseInt(req.query.offset || "0", 10), 0);
+  const search = (req.query.search || "").trim();
+
+  const whereClause = search
+    ? "WHERE (e.full_name LIKE ? OR e.email LIKE ?)"
+    : "";
+
+  const sqlCount = `SELECT COUNT(*) as total
+                     FROM employee e
+                     ${whereClause}`;
+
+  const sql = `SELECT e.*, c.name as category_name, d.name as department_name
                FROM employee e 
                JOIN category c ON e.category_id = c.id 
-               WHERE e.approval_status = 'pending'`;
-  con.query(sql, (err, result) => {
+               LEFT JOIN department d ON e.department_id = d.id
+               ${whereClause}
+               ORDER BY e.id DESC
+               LIMIT ? OFFSET ?`;
+
+  const countParams = search ? [`%${search}%`, `%${search}%`] : [];
+  const sqlParams = [...countParams, limit, offset];
+
+  con.query(sqlCount, countParams, (err, countResult) => {
     if (err) return res.json({ Status: false, Error: err });
-    return res.json({ Status: true, Result: result });
+
+    con.query(sql, sqlParams, (err2, result) => {
+      if (err2) return res.json({ Status: false, Error: err2 });
+      const total = countResult?.[0]?.total ?? 0;
+      return res.json({
+        Status: true,
+        Result: result,
+        Meta: { total, limit, offset },
+      });
+    });
   });
 });
+
+
+
+// Get pending employees (supports pagination)
+// Query params: limit, offset
+router.get("/pending_employees", (req, res) => {
+  const limit = Math.max(parseInt(req.query.limit || "20", 10), 1);
+  const offset = Math.max(parseInt(req.query.offset || "0", 10), 0);
+
+  const sqlCount = `SELECT COUNT(*) as total
+                     FROM employee e
+                     WHERE e.approval_status = 'pending'`;
+
+  const sql = `SELECT e.*, c.name as category_name, d.name as department_name
+               FROM employee e 
+               JOIN category c ON e.category_id = c.id 
+               LEFT JOIN department d ON e.department_id = d.id
+               WHERE e.approval_status = 'pending'
+               ORDER BY e.id DESC
+               LIMIT ? OFFSET ?`;
+
+  con.query(sqlCount, (err, countResult) => {
+    if (err) return res.json({ Status: false, Error: err });
+
+    con.query(sql, [limit, offset], (err2, result) => {
+      if (err2) return res.json({ Status: false, Error: err2 });
+      const total = countResult?.[0]?.total ?? 0;
+      return res.json({
+        Status: true,
+        Result: result,
+        Meta: { total, limit, offset },
+      });
+    });
+  });
+});
+
 
 // Approve employee
 router.put("/employees/:id/approve", (req, res) => {
   const sql = "UPDATE employee SET approval_status = 'approved' WHERE id = ?";
   con.query(sql, [req.params.id], (err, result) => {
     if (err) return res.json({ Status: false, Error: err.message || String(err) });
+
+    // Broadcast live dashboard updates
+    con.query(
+      "SELECT count(id) as pending FROM employee WHERE approval_status = 'pending'",
+      (e2, r2) => {
+        if (!e2) emitToDashboard("pendingEmployeesUpdated", { total: r2?.[0]?.pending ?? 0 });
+      }
+    );
+    con.query("SELECT count(id) as employee FROM employee", (e3, r3) => {
+      if (!e3) emitToDashboard("employeeCountUpdated", { total: r3?.[0]?.employee ?? 0 });
+    });
+
     return res.json({ Status: true, Message: "Employee approved successfully" });
   });
 });
+
 
 // Reject employee
 router.put("/employees/:id/reject", (req, res) => {
@@ -159,13 +287,17 @@ router.get("/pending_employee_count", (req, res) => {
 
 // Add employee with file upload
 router.post("/add_employee", upload.single("image"), (req, res) => {
-  const { full_name, email, salary, address, category_id, password } = req.body;
+  const { full_name, email, salary, address, category_id, department_id, password } = req.body;
+  if (!department_id) {
+    return res.status(400).json({ Status: false, Error: "Department is required" });
+  }
 
   bcrypt.hash(password || "defaultpassword", 10, (err, hash) => {
     if (err) return res.json({ Status: false, Error: "Hashing Error" });
 
-    const sql = `INSERT INTO employee (full_name, email, password, salary, address, image, category_id, approval_status) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'approved')`;
+    const sql = `INSERT INTO employee
+                (full_name, email, password, salary, address, image, category_id, department_id, approval_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'approved')`;
 
     const values = [
       full_name,
@@ -175,6 +307,7 @@ router.post("/add_employee", upload.single("image"), (req, res) => {
       address,
       req.file ? req.file.filename : null,
       category_id,
+      department_id,
     ];
 
     con.query(sql, values, (err, result) => {
@@ -195,19 +328,44 @@ router.get("/employee/:ID", (req, res) => {
 // to edit the employee
 router.put("/edit_employee/:id", (req, res) => {
   const id = req.params.id;
-  const { full_name, email, salary, address, category_id } = req.body;
+  const { full_name, email, salary, address, category_id, department_id } = req.body;
+  if (!department_id) {
+    return res.status(400).json({ Status: false, Error: "Department is required" });
+  }
 
   const sql = `UPDATE employee 
-               SET full_name = ?, email = ?, salary = ?, address = ?, category_id = ? 
+               SET full_name = ?, email = ?, salary = ?, address = ?, category_id = ?, department_id = ?
                WHERE id = ?`;
 
-  const values = [full_name, email, salary, address, category_id, id];
+  const values = [full_name, email, salary, address, category_id, department_id, id];
 
   con.query(sql, values, (err, result) => {
     if (err) {
       return res.json({ Status: false, Error: "Query Error: " + err });
     }
     return res.json({ Status: true, Message: "Employee Updated Successfully" });
+  });
+});
+
+// Update only salary (dedicated endpoint for salary table updates)
+router.put("/update_salary/:id", (req, res) => {
+  const id = req.params.id;
+  const { salary } = req.body;
+
+  if (salary === undefined || salary === null) {
+    return res.json({ Status: false, Error: "Salary is required" });
+  }
+
+  const sql = "UPDATE employee SET salary = ? WHERE id = ?";
+
+  con.query(sql, [salary, id], (err, result) => {
+    if (err) {
+      return res.json({ Status: false, Error: "Query Error: " + err });
+    }
+    if (result.affectedRows === 0) {
+      return res.json({ Status: false, Error: "Employee not found" });
+    }
+    return res.json({ Status: true, Message: "Salary Updated Successfully" });
   });
 });
 // Delete Employee Route
@@ -462,6 +620,65 @@ router.post("/auth/add_admin", (req, res) => {
   });
 });
 
+// ==================== DEPARTMENT MANAGEMENT ROUTES ====================
+
+// to add department use Post () method
+// NOTE: Frontend calls POST /add_department (no /auth). Keep /auth/add_department and also support /add_department.
+router.post("/add_department", (req, res) => {
+  const sql = `INSERT INTO department(name) VALUES(?)`;
+  con.query(sql, [req.body.department], (err, result) => {
+    if (err) return res.json({ Status: false, Error: err });
+    return res.json({ Status: true, Message: "Department Added Successfully" });
+  });
+});
+
+router.post("/auth/add_department", (req, res) => {
+  const sql = `INSERT INTO department(name) VALUES(?)`;
+  con.query(sql, [req.body.department], (err, result) => {
+    if (err) return res.json({ Status: false, Error: err });
+    return res.json({ Status: true, Message: "Department Added Successfully" });
+  });
+});
+//to select from db nd display on the screen use GET() method 
+router.get("/auth/department", (req, res) => {
+  const sql = `SELECT * FROM department`;
+  con.query(sql, (err, result) => {
+    if (err) {
+      console.error("DB query error:", err);
+      return res.status(500).json({ Status: false, Error: "Database error" });
+    }
+    return res.json({ Status: true, Result: result });
+  });
+});
+
+// for deleting department
+router.delete("/auth/delete_department/:ID", (req, res) => {
+  const id = req.params.ID;
+  const sql = "DELETE FROM department WHERE id = ?";
+  con.query(sql, [id], (err, result) => {
+    if (err) return res.json({ Status: false, Error: err });
+    if (result.affectedRows === 0)
+      return res.json({ Status: false, Error: "Department not found" });
+    return res.json({ Status: true, Message: "Department Deleted Successfully" });
+  });
+});
+
+//for editing department PUT () use to update the rows or values
+router.put("/auth/edit_department/:ID", (req, res) => {
+  const ID = req.params.ID;
+  const { name } = req.body;
+
+  const sql = "UPDATE department SET name = ? WHERE id = ?";
+
+  con.query(sql, [name, ID], (err, result) => {
+    if (err) {
+      return res.json({ Status: false, Error: "Query Error" });
+    }
+
+    return res.json({ Status: true });
+  });
+});
+
 // ==================== LEAVE MANAGEMENT ROUTES ====================
 
 // Get all leaves with employee details
@@ -481,7 +698,6 @@ router.get("/leave_counts", (req, res) => {
   const sql = `SELECT status, COUNT(*) as count FROM leaves GROUP BY status`;
   con.query(sql, (err, result) => {
     if (err) return res.json({ Status: false, Error: err });
-    
     const counts = { applied: 0, approved: 0, rejected: 0, pending: 0 };
     result.forEach(row => {
       if (counts.hasOwnProperty(row.status)) {
@@ -494,9 +710,46 @@ router.get("/leave_counts", (req, res) => {
   });
 });
 
+// Get all leaves with employee details (supports pagination)
+// Query params: limit, offset
+router.get("/leaves", (req, res) => {
+  const limit = Math.max(parseInt(req.query.limit || "20", 10), 1);
+  const offset = Math.max(parseInt(req.query.offset || "0", 10), 0);
+
+  const sqlCount = `SELECT COUNT(*) as total
+                     FROM leaves l
+                     JOIN employee e ON l.employee_id = e.id`;
+
+  const sql = `SELECT l.*, e.full_name as employee_name 
+               FROM leaves l 
+               JOIN employee e ON l.employee_id = e.id 
+               ORDER BY l.applied_date DESC
+               LIMIT ? OFFSET ?`;
+
+  con.query(sqlCount, (err, countResult) => {
+    if (err) return res.json({ Status: false, Error: err });
+
+    con.query(sql, [limit, offset], (err2, result) => {
+      if (err2) return res.json({ Status: false, Error: err2 });
+      const total = countResult?.[0]?.total ?? 0;
+      return res.json({
+        Status: true,
+        Result: result,
+        Meta: { total, limit, offset },
+      });
+    });
+  });
+});
+
 // Add new leave
 router.post("/leaves", (req, res) => {
   const { employee_id, leave_type, start_date, end_date, reason } = req.body;
+  if (!employee_id || !leave_type || !start_date || !end_date || !reason?.trim()) {
+    return res.status(400).json({ Status: false, Error: "All leave fields are required" });
+  }
+  if (new Date(end_date) < new Date(start_date)) {
+    return res.status(400).json({ Status: false, Error: "End date cannot be before start date" });
+  }
   const sql = `INSERT INTO leaves (employee_id, leave_type, start_date, end_date, reason, status, applied_date) 
                VALUES (?, ?, ?, ?, ?, 'pending', NOW())`;
   con.query(sql, [employee_id, leave_type, start_date, end_date, reason], (err, result) => {
@@ -504,6 +757,7 @@ router.post("/leaves", (req, res) => {
     return res.json({ Status: true, Message: "Leave applied successfully" });
   });
 });
+
 
 // Approve leave
 router.put("/leaves/:id/approve", (req, res) => {
@@ -532,15 +786,116 @@ router.delete("/leaves/:id", (req, res) => {
   });
 });
 
-// Search employees
-router.get("/search_employees", (req, res) => {
-  const search = req.query.q || "";
-  const sql = `SELECT e.*, c.name as category_name 
-               FROM employee e 
-               JOIN category c ON e.category_id = c.id 
-               WHERE e.full_name LIKE ? OR e.email LIKE ?`;
-  con.query(sql, [`%${search}%`, `%${search}%`], (err, result) => {
+// ==================== ATTENDANCE MANAGEMENT ROUTES ====================
+
+// Get all attendances with employee details
+router.get("/attendances", (req, res) => {
+  const sql = `SELECT a.*, e.full_name as employee_name, e.email 
+               FROM attendance a 
+               JOIN employee e ON a.employee_id = e.id 
+               ORDER BY a.submitted_at DESC`;
+  con.query(sql, (err, result) => {
     if (err) return res.json({ Status: false, Error: err });
+    return res.json({ Status: true, Result: result });
+  });
+});
+
+// Get pending attendance count
+router.get("/pending_attendance_count", (req, res) => {
+  const sql = "SELECT COUNT(id) as pending FROM attendance WHERE status = 'pending'";
+  con.query(sql, (err, result) => {
+    if (err) return res.json({ Status: false, Error: err });
+    return res.json({ Status: true, Result: result });
+  });
+});
+
+// Approve attendance
+router.put("/attendances/:id/approve", (req, res) => {
+  const sql = "UPDATE attendance SET status = 'approved' WHERE id = ?";
+  con.query(sql, [req.params.id], (err, result) => {
+    if (err) return res.json({ Status: false, Error: err.message || String(err) });
+    return res.json({ Status: true, Message: "Attendance approved" });
+  });
+});
+
+// Reject attendance
+router.put("/attendances/:id/reject", (req, res) => {
+  const sql = "UPDATE attendance SET status = 'rejected' WHERE id = ?";
+  con.query(sql, [req.params.id], (err, result) => {
+    if (err) return res.json({ Status: false, Error: err.message || String(err) });
+    return res.json({ Status: true, Message: "Attendance rejected" });
+  });
+});
+
+// Backward compatible alias for frontend which calls /auth/dashboard/admin-profile
+router.get("/auth/dashboard/admin-profile", (req, res) => {
+  // Forward to the actual route handler by directly invoking the DB logic
+  // to avoid using internal express internals like router._router.handle.
+  const sqlWithImage = "SELECT full_name, email, image FROM admin LIMIT 1";
+
+  con.query(sqlWithImage, (err, result) => {
+    if (err) {
+      const sqlWithoutImage = "SELECT full_name, email FROM admin LIMIT 1";
+      con.query(sqlWithoutImage, (err2, result2) => {
+        if (err2) {
+          console.error("Database Error:", err2);
+          return res.json({ Status: false, Error: "Query Error" });
+        }
+        if (result2 && result2.length > 0) {
+          return res.json({
+            Status: true,
+            full_name: result2[0].full_name,
+            email: result2[0].email,
+            image: null,
+          });
+        }
+        return res.json({ Status: false, Error: "No admin records found" });
+      });
+      return;
+    }
+
+    if (result && result.length > 0) {
+      return res.json({
+        Status: true,
+        full_name: result[0].full_name,
+        email: result[0].email,
+        image: result[0].image || null,
+      });
+    }
+
+    return res.json({ Status: false, Error: "No admin records found" });
+  });
+});
+
+// ==================== HOME: DEPARTMENT PERFORMANCE ====================
+// Frontend expects:
+// GET /departments_performance -> [] of { id, name, user_count, skill_title, avg_experience_score }
+router.get("/departments_performance", (req, res) => {
+  const sql = `
+    SELECT d.id, d.name, COUNT(e.id) AS user_count
+    FROM department d
+    LEFT JOIN employee e ON e.department_id = d.id
+    GROUP BY d.id, d.name
+    ORDER BY d.id ASC
+  `;
+
+  con.query(sql, (err, rows) => {
+    if (err) {
+      console.error("departments_performance: departments query failed", err);
+      return res.json({ Status: false, Error: "Database error" });
+    }
+
+    const result = (rows || []).map((department) => ({
+      id: department.id,
+      name: department.name,
+      user_count: Number(department.user_count),
+      skill_title: "N/A",
+      avg_experience_score: null,
+    }));
+
+    const io = globalThis.io;
+    if (io) io.emit("departmentPerformanceUpdated", { departments: result });
+
     return res.json({ Status: true, Result: result });
   });
 });

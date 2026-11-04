@@ -9,7 +9,7 @@ const AddCategory = () => {
   const handleSubmit = (e) => {
     e.preventDefault();
     axios
-      .post("http://localhost:3000/auth/add_category", { category }, { withCredentials: true })
+      .post("http://localhost:3000/add_category", { category }, { withCredentials: true })
       .then((result) => {
         if (result.data.Status) navigate("/dashboard/category");
         else alert(result.data.Error);
