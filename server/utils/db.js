@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import fs from "node:fs";
 import pg from "pg";
 
 const { Pool } = pg;
@@ -68,6 +69,10 @@ const con = {
   async connect() {
     try {
       await pool.query("SELECT 1");
+      if (process.env.AUTO_INIT_SCHEMA === "true") {
+        const schemaPath = resolve(dirname(fileURLToPath(import.meta.url)), "postgres_schema.sql");
+        await pool.query(fs.readFileSync(schemaPath, "utf8"));
+      }
       console.log("PostgreSQL connected successfully");
     } catch (error) {
       console.error("PostgreSQL connection error:", error.message);
