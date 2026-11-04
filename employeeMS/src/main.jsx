@@ -4,7 +4,7 @@ import App from './App.jsx'
 import './index.css'
 import axios from 'axios'
 
-const apiUrl = String(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const apiUrl = String(import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '')
 axios.interceptors.request.use((config) => {
   config.url = config.url?.replace('http://localhost:3000', apiUrl)
   return config
