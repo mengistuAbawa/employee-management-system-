@@ -7,14 +7,14 @@
 - Leave applications & approvals
 - Department/Category management
 - Salary updates & payroll views
-- Profile management w/ image upload
+- Profile management w. camera or disk image uploads
 - Responsive design + Dark mode
-- JWT auth + MySQL backend
+- JWT authentication + PostgreSQL backend
 
 ## Tech Stack
 - **Frontend**: React 19 + Vite + Tailwind CSS + React Router
-- **Backend**: Node.js + Express + MySQL + Multer + JWT + bcrypt
-- **Database**: MySQL (see server/utils/*.sql)
+- **Backend**: Node.js + Express + PostgreSQL + Multer + JWT + bcrypt
+- **Database**: PostgreSQL (see `server/utils/postgres_schema.sql`)
 
 ## Quick Start
 ```bash
@@ -37,7 +37,6 @@ npm run dev  # Runs on http://localhost:5173
 All protected by JWT. See server/Routes/*.js
 
 ## Database Setup
-Run SQL scripts in `server/utils/` against your MySQL DB.
+Create the `employees` database in PostgreSQL, copy `server/.env.example` to `server/.env`, and run `server/utils/postgres_schema.sql`.
 
 **Production-ready Full-Stack EMS! 🎉**
-
