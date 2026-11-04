@@ -125,7 +125,8 @@ const Home = () => {
     fetchInitialData();
 
     // 2. REAL-TIME WEBSOCKET SUBSCRIPTION
-    const socket = io("http://localhost:3000", { withCredentials: true });
+    const socketUrl = String(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+    const socket = io(socketUrl, { withCredentials: true });
     socketRef.current = socket;
 
     socket.on("connect", () => console.log("Connected to Real-Time Matrix Pipeline"));

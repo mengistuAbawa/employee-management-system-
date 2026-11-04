@@ -15,7 +15,11 @@ import { EmployeeRouter } from "./Routes/EmployeeRoute_fixed.js";
 const app = express();
 
 app.use(cors({
-    origin:['http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin:[...new Set([
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL.replace(/\/$/, '')] : []),
+    ])],
     methods:['GET','POST','PUT','DELETE'],
     credentials:true
 }));
@@ -58,7 +62,11 @@ const httpServer = http.createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: [
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+      ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL.replace(/\/$/, "")] : []),
+    ],
     credentials: true,
   },
 });
@@ -136,4 +144,3 @@ io.on("connection", (socket) => {
 httpServer.listen(3000, () => {
   console.log("The server is done (HTTP + Socket.IO)");
 });
-
