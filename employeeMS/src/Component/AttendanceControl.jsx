@@ -1,92 +1,83 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
-import { Clock, CheckCircle, XCircle, Search, RefreshCw } from "lucide-react";
+import { Clock, CheckCircle, XCircle, Search, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+
+const apiBaseUrl = String(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+const pageSize = 50;
 
 const AttendanceControl = () => {
   const [attendances, setAttendances] = useState([]);
-  const [filteredAttendances, setFilteredAttendances] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [reviewingId, setReviewingId] = useState(null);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [total, setTotal] = useState(0);
 
-  useEffect(() => {
-    fetchAttendances();
-  }, []);
-
-  const fetchAttendances = async () => {
+  const fetchAttendances = useCallback(async (nextOffset) => {
+    setLoading(true);
     try {
-      const res = await axios.get("http://localhost:3000/attendances", {
-        params: { limit: 50, offset: 0 },
+      const params = { limit: pageSize, offset: nextOffset };
+      if (statusFilter !== "all") params.status = statusFilter;
+      if (dateFilter) params.date = dateFilter;
+      if (searchTerm.trim()) params.search = searchTerm.trim();
+      const response = await axios.get(`${apiBaseUrl}/attendances`, {
+        params,
         withCredentials: true,
       });
-      if (res.data.Status) {
-        const data = res.data.Result || [];
-        setAttendances(data);
-        setFilteredAttendances(data);
-
-      } else {
-        setError(res.data.Error || "Failed to fetch attendances");
+      if (!response.data?.Status) {
+        throw new Error(response.data?.Error || "Could not load attendance records");
       }
-    } catch (err) {
-      setError(err.response?.data?.Error || "Network error");
+      setAttendances(response.data.Result || []);
+      setTotal(Number(response.data.Meta?.total || 0));
+      setOffset(nextOffset);
+      setError("");
+    } catch (requestError) {
+      setError(requestError.response?.data?.Error || requestError.message || "Could not load attendance records");
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateFilter, searchTerm, statusFilter]);
 
   useEffect(() => {
-    const filtered = attendances.filter(att => {
-      const matchesSearch = att.employee_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           att.email?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === "all" || att.status === statusFilter;
-      const matchesDate = !dateFilter || new Date(att.date).toISOString().split('T')[0] === dateFilter;
-      return matchesSearch && matchesStatus && matchesDate;
-    });
-    setFilteredAttendances(filtered);
-  }, [attendances, searchTerm, statusFilter, dateFilter]);
+    const timer = setTimeout(() => {
+      fetchAttendances(0);
+    }, searchTerm ? 250 : 0);
+    return () => clearTimeout(timer);
+  }, [dateFilter, fetchAttendances, searchTerm, statusFilter]);
 
-  const handleApprove = async (id) => {
-    if (!confirm("Approve this attendance record?")) return;
+  const reviewAttendance = async (id, action) => {
+    setReviewingId(id);
+    setError("");
     try {
-      const res = await axios.put(`http://localhost:3000/attendances/${id}/approve`, {}, { withCredentials: true });
-      if (res.data.Status) {
-        fetchAttendances();
-      } else {
-        alert(res.data.Error || "Approve failed");
+      const response = await axios.put(`${apiBaseUrl}/attendances/${id}/${action}`, {}, { withCredentials: true });
+      if (!response.data?.Status) {
+        throw new Error(response.data?.Error || `Could not ${action} attendance`);
       }
-    } catch (err) {
-      alert(err.response?.data?.Error || "Approve failed");
+      await fetchAttendances(offset);
+    } catch (requestError) {
+      setError(requestError.response?.data?.Error || requestError.message || `Could not ${action} attendance`);
+    } finally {
+      setReviewingId(null);
     }
   };
 
-  const handleReject = async (id) => {
-    if (!confirm("Reject this attendance record?")) return;
-    try {
-      const res = await axios.put(`http://localhost:3000/attendances/${id}/reject`, {}, { withCredentials: true });
-      if (res.data.Status) {
-        fetchAttendances();
-      } else {
-        alert(res.data.Error || "Reject failed");
-      }
-    } catch (err) {
-      alert(err.response?.data?.Error || "Reject failed");
-    }
-  };
-
-  if (loading) return <div className="card p-8 text-center">Loading attendances...</div>;
+  const pageStart = total === 0 ? 0 : offset + 1;
+  const pageEnd = Math.min(offset + attendances.length, total);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex items-center gap-2">
           <Clock size={28} className="text-blue-500" />
           <h4 className="text-2xl font-bold text-gray-800 dark:text-white">Attendance Control</h4>
         </div>
-        <button 
-          onClick={fetchAttendances} 
-          className="flex items-center gap-2 btn-primary px-4 py-2"
+        <button
+          type="button"
+          onClick={() => fetchAttendances(offset)}
+          className="btn-primary flex items-center gap-2 px-4 py-2"
           disabled={loading}
         >
           <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
@@ -95,28 +86,28 @@ const AttendanceControl = () => {
       </div>
 
       {error && (
-        <div className="card p-4 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-200 border border-red-200 dark:border-red-800 rounded-lg">
+        <div role="alert" className="card rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 transform text-gray-400" />
           <input
-            type="text"
-            placeholder="Search by employee name or email..."
+            type="search"
+            placeholder="Search employee or email..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            onChange={(event) => setSearchTerm(event.target.value)}
+            className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-10 pr-4 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
           />
         </div>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none"
+          onChange={(event) => setStatusFilter(event.target.value)}
+          className="rounded-lg border border-gray-300 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
         >
-          <option value="all">All Status</option>
+          <option value="all">All statuses</option>
           <option value="pending">Pending</option>
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
@@ -124,77 +115,98 @@ const AttendanceControl = () => {
         <input
           type="date"
           value={dateFilter}
-          onChange={(e) => setDateFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 outline-none"
+          onChange={(event) => setDateFilter(event.target.value)}
+          className="rounded-lg border border-gray-300 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
         />
       </div>
 
       <div className="card overflow-hidden">
-        <div className="flex justify-between items-center mb-4 p-4 border-b">
+        <div className="flex items-center justify-between border-b p-4">
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            Showing {filteredAttendances.length} of {attendances.length} records
+            Showing {pageStart}–{pageEnd} of {total} records
           </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => fetchAttendances(Math.max(0, offset - pageSize))}
+              disabled={loading || offset === 0}
+              aria-label="Previous attendance page"
+              className="rounded-lg border p-2 disabled:opacity-40 dark:border-gray-600"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => fetchAttendances(offset + pageSize)}
+              disabled={loading || offset + pageSize >= total}
+              aria-label="Next attendance page"
+              className="rounded-lg border p-2 disabled:opacity-40 dark:border-gray-600"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-700 uppercase text-gray-500 dark:text-gray-400 sticky top-0">
+            <thead className="sticky top-0 bg-gray-50 uppercase text-gray-500 dark:bg-gray-700 dark:text-gray-400">
               <tr>
                 <th className="px-4 py-3 text-left">#</th>
                 <th className="px-4 py-3 text-left">Employee</th>
                 <th className="px-4 py-3 text-left">Date</th>
-                <th className="px-4 py-3 text-left">Clock In</th>
-                <th className="px-4 py-3 text-left">Clock Out</th>
+                <th className="px-4 py-3 text-left">Clock in</th>
+                <th className="px-4 py-3 text-left">Clock out</th>
                 <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredAttendances.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-gray-500 dark:text-gray-400">
-                    {attendances.length === 0 ? "No attendance records found." : "No matching records found."}
+              {loading ? (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-500">Loading attendance records...</td></tr>
+              ) : attendances.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-500 dark:text-gray-400">No matching attendance records found.</td></tr>
+              ) : attendances.map((attendance, index) => (
+                <tr key={attendance.id} className="border-b hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700/50">
+                  <td className="px-4 py-3 font-medium">{offset + index + 1}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">
+                    <div>{attendance.employee_name}</div>
+                    <div className="text-xs font-normal text-gray-500">{attendance.email}</div>
+                  </td>
+                  <td className="px-4 py-3">{new Date(`${String(attendance.date).slice(0, 10)}T00:00:00`).toLocaleDateString()}</td>
+                  <td className="px-4 py-3">{attendance.clock_in_time || "—"}</td>
+                  <td className="px-4 py-3">{attendance.clock_out_time || "—"}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      attendance.status === "approved" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" :
+                        attendance.status === "rejected" ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" :
+                          "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                    }`}>
+                      {attendance.status}
+                    </span>
+                  </td>
+                  <td className="space-x-1 whitespace-nowrap px-4 py-3 text-right">
+                    {attendance.status === "pending" && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => reviewAttendance(attendance.id, "approve")}
+                          disabled={reviewingId === attendance.id}
+                          className="inline-flex items-center rounded-md bg-green-100 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-200 disabled:opacity-50 dark:bg-green-900 dark:text-green-200"
+                        >
+                          <CheckCircle size={14} className="mr-1" /> Approve
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => reviewAttendance(attendance.id, "reject")}
+                          disabled={reviewingId === attendance.id}
+                          className="inline-flex items-center rounded-md bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-200 disabled:opacity-50 dark:bg-red-900 dark:text-red-200"
+                        >
+                          <XCircle size={14} className="mr-1" /> Reject
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
-              ) : (
-                filteredAttendances.map((att, idx) => (
-                  <tr key={att.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td className="px-4 py-3 font-medium">{idx + 1}</td>
-                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{att.employee_name}</td>
-                    <td className="px-4 py-3">{new Date(att.date).toLocaleDateString()}</td>
-                    <td className="px-4 py-3">{att.clock_in_time || 'N/A'}</td>
-                    <td className="px-4 py-3">{att.clock_out_time || 'N/A'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        att.status === 'approved' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                        att.status === 'rejected' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                      }`}>
-                        {att.status?.charAt(0).toUpperCase() + att.status?.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right space-x-1">
-                      {att.status === 'pending' && (
-                        <>
-                          <button
-                            onClick={() => handleApprove(att.id)}
-                            className="inline-flex items-center px-3 py-1.5 text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800 rounded-md transition-colors"
-                          >
-                            <CheckCircle size={14} className="mr-1" />
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => handleReject(att.id)}
-                            className="inline-flex items-center px-3 py-1.5 text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800 rounded-md transition-colors"
-                          >
-                            <XCircle size={14} className="mr-1" />
-                            Reject
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </div>

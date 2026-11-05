@@ -19,16 +19,23 @@ import EmployeeDetail from "./Component/EmployeeDetail";
 import Leave from "./Component/Leave";
 import AddLeave from "./Component/AddLeave";
 import Salary from "./Component/Salary";
+import PayrollManagement from "./Component/PayrollManagement";
+import PerformanceManagement from "./Component/PerformanceManagement";
 import EmployeeDashboard from "./Component/EmployeeDashboard";
 import EmployeeDashboardHome from "./Component/EmployeeDashboardHome";
 import EmployeeAttendance from "./Component/EmployeeAttendance";
 import EmployeeMyLeaves from "./Component/EmployeeMyLeaves";
 import EmployeePayroll from "./Component/EmployeePayroll";
+import EmployeePerformance from "./Component/EmployeePerformance";
+import EmployeeNotifications from "./Component/EmployeeNotifications";
+import CommunicationsManagement from "./Component/CommunicationsManagement";
+import ReportsManagement from "./Component/ReportsManagement";
 import EmployeeSettings from "./Component/EmployeeSettings";
 import PendingEmployees from "./Component/PendingEmployees";
 import Department from "./Component/Department";
 import AddDepartment from "./Component/AddDepartment";
 import EditDepartment from "./Component/EditDepartment";
+import PositionManagement from "./Component/PositionManagement";
 import HelpSupport from "./Component/HelpSupport";
 import ProtectedRoute from "./Component/ProtectedRoute";
 import AttendanceControl from "./Component/AttendanceControl";
@@ -72,7 +79,10 @@ function App() {
             <Route path="leaves" element={<Leave />} />
             <Route path="add_leave/:id" element={<AddLeave />} />
             <Route path="salary" element={<Salary />} />
-            <Route path="payroll" element={<EmployeePayroll />} />
+            <Route path="payroll" element={<PayrollManagement />} />
+            <Route path="performance" element={<PerformanceManagement />} />
+            <Route path="communications" element={<CommunicationsManagement />} />
+            <Route path="reports" element={<ReportsManagement />} />
             <Route path="edit_employee/:id" element={<EditEmployee />} />
             <Route path="edit_category/:id" element={<EditCategory />} />
             <Route path="edit_admin/:id" element={<EditAdmin />} />
@@ -80,6 +90,7 @@ function App() {
             <Route path="department" element={<Department />} />
             <Route path="department/add" element={<AddDepartment />} />
             <Route path="department/edit/:id" element={<EditDepartment />} />
+            <Route path="positions" element={<PositionManagement />} />
             <Route path="help-support" element={<HelpSupport />} />
             <Route path="attendance" element={<AttendanceControl />} />
           </Route>
@@ -95,6 +106,8 @@ function App() {
             <Route path="attendance" element={<EmployeeAttendance />} />
             <Route path="leaves" element={<EmployeeMyLeaves />} />
             <Route path="payroll" element={<EmployeePayroll />} />
+            <Route path="performance" element={<EmployeePerformance />} />
+            <Route path="notifications" element={<EmployeeNotifications />} />
             <Route path="settings" element={<EmployeeSettings />} />
           </Route>
         </Routes>

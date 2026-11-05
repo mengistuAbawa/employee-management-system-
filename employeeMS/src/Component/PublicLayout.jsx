@@ -112,7 +112,7 @@ const PublicLayout = () => {
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-1 items-center justify-center p-4 sm:p-8">
+        <main className="flex min-w-0 flex-1 items-start justify-center p-4 sm:p-8">
           <div className="w-full max-w-6xl">
             <Outlet />
           </div>

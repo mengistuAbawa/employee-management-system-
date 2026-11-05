@@ -1,179 +1,255 @@
-import React, { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import axios from "axios";
+import profile from "./Image/profile.jpg";
 
-const getStatusBadge = (status) => {
-  const s = (status || "").toLowerCase();
-  if (s === "approved") return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200">Approved</span>;
-  if (s === "rejected") return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200">Rejected</span>;
-  return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200">Pending</span>;
-};
+const apiBaseUrl = String(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+const pageSize = 20;
 
 const Employee = () => {
   const [employees, setEmployees] = useState([]);
   const [search, setSearch] = useState("");
-  const [loggingIn, setLoggingIn] = useState(null);
-  const [loginPassword, setLoginPassword] = useState("");
-  const navigate = useNavigate();
+  const [employmentFilter, setEmploymentFilter] = useState("active");
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [offboardingEmployee, setOffboardingEmployee] = useState(null);
+  const [departureReason, setDepartureReason] = useState("");
+  const [offboarding, setOffboarding] = useState(false);
+  const [offboardingError, setOffboardingError] = useState("");
+
+  const fetchEmployees = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await axios.get(`${apiBaseUrl}/employee`, {
+        params: {
+          limit: pageSize,
+          offset: page * pageSize,
+          search,
+          status: employmentFilter,
+        },
+        withCredentials: true,
+      });
+      if (!data.Status) throw new Error(data.Error || "Could not load employees");
+      setEmployees(data.Result || []);
+      setTotal(Number(data.Meta?.total || 0));
+      setError("");
+    } catch (requestError) {
+      setError(requestError.response?.data?.Error || requestError.message || "Could not load employees");
+    } finally {
+      setLoading(false);
+    }
+  }, [page, search, employmentFilter]);
 
   useEffect(() => {
     fetchEmployees();
-  }, []);
+  }, [fetchEmployees]);
 
-  const fetchEmployees = () => {
-    axios
-      .get("http://localhost:3000/employee", {
-        params: { limit: 20, offset: 0 },
-        withCredentials: true,
-      })
-      .then((result) => {
-        if (result.data.Status) {
-          setEmployees(result.data.Result);
-        } else {
-          alert(result.data.Error);
-        }
-      })
-      .catch((err) => console.log(err));
+  const openOffboarding = (employee) => {
+    setOffboardingEmployee(employee);
+    setDepartureReason("");
+    setOffboardingError("");
   };
 
-  const handleLogin = (employee) => {
-    setLoggingIn(employee.id);
-    setLoginPassword("");
-  };
-
-  const handleLoginSubmit = (e) => {
-    e.preventDefault();
-    if (!loginPassword) {
-      alert("Please enter password");
+  const handleOffboarding = async (event) => {
+    event.preventDefault();
+    if (!offboardingEmployee || !departureReason.trim()) {
+      setOffboardingError("Enter a reason before confirming this employee's departure.");
       return;
     }
-    axios
-        .post("http://localhost:3000/employee/employee_login", { email: employees.find(e => e.id === loggingIn)?.email, password: loginPassword }, { withCredentials: true })
-      .then((result) => {
-        if (result.data.loginStatus) {
-          localStorage.setItem("valid", "true");
-          localStorage.setItem("employeeId", result.data.id);
-          setLoggingIn(null);
-          navigate("/employee/dashboard");
-        } else {
-          alert(result.data.Error || "Invalid password");
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        alert("Login failed");
-      });
-  };
 
-  const handleCancelLogin = () => {
-    setLoggingIn(null);
-    setLoginPassword("");
-  };
-
-  const handleDelete = (id) => {
-    if (window.confirm("Are you sure you want to delete this employee?")) {
-      axios
-        .delete("http://localhost:3000/delete_employee")
-        .then((res) => {
-          if (res.data.Status) {
-            fetchEmployees();
-          } else {
-            alert(res.data.Error);
-          }
-        })
-        .catch((err) => console.log(err));
+    setOffboarding(true);
+    setOffboardingError("");
+    try {
+      const { data } = await axios.put(
+        `${apiBaseUrl}/employees/${offboardingEmployee.id}/offboard`,
+        { reason: departureReason.trim() },
+        { withCredentials: true },
+      );
+      if (!data.Status) throw new Error(data.Error || "Could not record employee departure");
+      setOffboardingEmployee(null);
+      setDepartureReason("");
+      if (page > 0 && page * pageSize >= total - 1) {
+        setPage((current) => current - 1);
+      } else {
+        await fetchEmployees();
+      }
+    } catch (requestError) {
+      setOffboardingError(requestError.response?.data?.Error || requestError.message || "Could not record employee departure");
+    } finally {
+      setOffboarding(false);
     }
   };
 
-  const handleSearch = (e) => {
-    setSearch(e.target.value);
-  };
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const filteredEmployees = employees.filter((e) =>
-    e.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    e.email.toLowerCase().includes(search.toLowerCase())
-  );
-
-return (
+  return (
     <div className="space-y-4">
-      {loggingIn && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-sm">
-            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Enter Password to Login</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Logging in as: {employees.find(e => e.id === loggingIn)?.full_name}</p>
-            <form onSubmit={handleLoginSubmit}>
-              <input
-                type="password"
-                className="input-field w-full mb-4"
-                placeholder="Enter password"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-              />
-              <div className="flex gap-2">
-                <button type="submit" className="flex-1 btn-success">Login</button>
-                <button type="button" onClick={handleCancelLogin} className="flex-1 btn-secondary">Cancel</button>
+      {offboardingEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Record employee departure</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              {offboardingEmployee.full_name} will no longer be able to sign in. Their profile, salary, attendance, and leave history will be retained.
+            </p>
+            <form onSubmit={handleOffboarding} className="mt-4 space-y-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                Departure reason
+                <textarea
+                  className="input-field mt-1 min-h-28 w-full"
+                  value={departureReason}
+                  onChange={(event) => setDepartureReason(event.target.value)}
+                  maxLength={2000}
+                  required
+                  autoFocus
+                />
+              </label>
+              {offboardingError && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{offboardingError}</p>}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setOffboardingEmployee(null)}
+                  disabled={offboarding}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-danger" disabled={offboarding || !departureReason.trim()}>
+                  {offboarding ? "Recording..." : "Record departure"}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h3 className="text-xl font-bold text-gray-800 dark:text-white">Employee List</h3>
-        <div className="flex items-center gap-3">
-          <input
-            type="text"
-            className="input-field w-64"
-            placeholder="Search by name or email..."
-            value={search}
-            onChange={handleSearch}
-          />
-          <Link to="/dashboard/add_employee" className="btn-success text-sm">Add Employee</Link>
+
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-xl font-bold text-gray-800 dark:text-white">Employee Management</h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            View employee profiles, manage salary, and retain a record of departures.
+          </p>
         </div>
+        <Link to="/dashboard/add_employee" className="btn-success text-sm">Add Employee</Link>
       </div>
+
+      <div className="flex flex-wrap gap-3">
+        <input
+          type="search"
+          className="input-field min-w-56 flex-1"
+          placeholder="Search name or email..."
+          value={search}
+          onChange={(event) => {
+            setPage(0);
+            setSearch(event.target.value);
+          }}
+        />
+        <select
+          className="input-field w-auto min-w-40"
+          value={employmentFilter}
+          onChange={(event) => {
+            setPage(0);
+            setEmploymentFilter(event.target.value);
+          }}
+          aria-label="Filter employee status"
+        >
+          <option value="active">Active employees</option>
+          <option value="departed">Departed employees</option>
+          <option value="all">All employees</option>
+        </select>
+      </div>
+
+      {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
 
       <div className="overflow-x-auto card">
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-700">
             <tr>
-              <th className="px-4 py-3 rounded-l-lg">Name</th>
-              <th className="px-4 py-3">Image</th>
+              <th className="px-4 py-3">Employee</th>
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Salary</th>
-              <th className="px-4 py-3">Address</th>
-              <th className="px-4 py-3">Category</th>
-              <th className="px-4 py-3">Department</th>
+              <th className="px-4 py-3">Department / Position</th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 rounded-r-lg text-right">Action</th>
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredEmployees.map((e) => (
-              <tr key={e.id} className="border-b dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{e.full_name}</td>
+            {loading ? (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">Loading employees...</td></tr>
+            ) : employees.length ? employees.map((employee) => (
+              <tr key={employee.id} className="border-b dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                 <td className="px-4 py-3">
-                  <img
-                    src={`http://localhost:3000/images/${e.image}`}
-                    alt={e.full_name}
-                    className="w-10 h-10 rounded-full object-cover"
-                  />
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={employee.image ? `${apiBaseUrl}/images/${employee.image}` : profile}
+                      alt=""
+                      className="h-10 w-10 rounded-full object-cover"
+                    />
+                    <div>
+                      <p className="font-medium text-gray-800 dark:text-gray-200">{employee.full_name}</p>
+                      <p className="text-xs text-gray-500">#{employee.id}</p>
+                    </div>
+                  </div>
                 </td>
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.email}</td>
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.salary}</td>
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.address}</td>
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.category_name}</td>
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{e.department_name || "Unassigned"}</td>
-                <td className="px-4 py-3">{getStatusBadge(e.approval_status)}</td>
-<td className="px-4 py-3 text-right whitespace-nowrap space-x-1">
-                  <Link to={`/dashboard/edit_employee/${e.id}`} className="inline-block px-2 py-1 text-xs font-medium rounded bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-200 hover:bg-cyan-200 dark:hover:bg-cyan-800">Edit</Link>
-                  <button onClick={() => handleLogin(e)} className="inline-block px-2 py-1 text-xs font-medium rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200 hover:bg-indigo-200 dark:hover:bg-indigo-800">Login</button>
-                  <button onClick={() => handleDelete(e.id)} className="inline-block px-2 py-1 text-xs font-medium rounded bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-800">Delete</button>
-                  <Link to={`/dashboard/add_leave/${e.id}`} className="inline-block px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800">Leave</Link>
-                  <Link to={`/employee/dashboard/payroll`} className="inline-block px-2 py-1 text-xs font-medium rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-800">Salary</Link>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{employee.email}</td>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                  {new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(Number(employee.salary) || 0)}
+                </td>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                  <span>{employee.department_name || "No department"}</span>
+                  <span className="block text-xs text-gray-500">{employee.position_name || "No position assigned"}</span>
+                  <span className="block text-xs text-gray-500">{employee.category_name || "No category"}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`rounded-full px-2 py-1 text-xs ${
+                    employee.employment_status === "departed"
+                      ? "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200"
+                      : employee.approval_status === "approved"
+                        ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200"
+                        : employee.approval_status === "rejected"
+                          ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200"
+                          : "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200"
+                  }`}>
+                    {employee.employment_status === "departed" ? "Departed" : employee.approval_status || "Pending"}
+                  </span>
+                  {employee.departure_reason && (
+                    <p className="mt-1 max-w-48 truncate text-xs text-gray-500" title={employee.departure_reason}>
+                      Reason: {employee.departure_reason}
+                    </p>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <Link to={`/employee_detail/${employee.id}`} className="mr-2 inline-block rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-200">View</Link>
+                  <Link to={`/dashboard/edit_employee/${employee.id}`} className="mr-2 inline-block rounded bg-cyan-100 px-2 py-1 text-xs font-medium text-cyan-700 dark:bg-cyan-900 dark:text-cyan-200">Edit</Link>
+                  <Link to="/dashboard/salary" className="mr-2 inline-block rounded bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200">Salary</Link>
+                  {employee.employment_status !== "departed" && (
+                    <button
+                      type="button"
+                      onClick={() => openOffboarding(employee)}
+                      className="inline-block rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-700 dark:bg-red-900 dark:text-red-200"
+                    >
+                      Record departure
+                    </button>
+                  )}
                 </td>
               </tr>
-            ))}
+            )) : (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">No employees found.</td></tr>
+            )}
           </tbody>
         </table>
+      </div>
+      <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+        <span>{total ? `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, total)} of ${total}` : "0 employees"}</span>
+        <div className="flex gap-2">
+          <button type="button" className="btn-secondary px-3 py-1" onClick={() => setPage((current) => Math.max(current - 1, 0))} disabled={page === 0 || loading}>
+            Previous
+          </button>
+          <button type="button" className="btn-secondary px-3 py-1" onClick={() => setPage((current) => current + 1)} disabled={page + 1 >= totalPages || loading}>
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );

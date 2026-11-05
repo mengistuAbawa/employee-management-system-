@@ -4,6 +4,8 @@ import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import helmet from "helmet";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 dotenv.config();
 
 if (process.env.NODE_ENV === "production" && (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32)) {
@@ -12,6 +14,8 @@ if (process.env.NODE_ENV === "production" && (!process.env.JWT_SECRET || process
 
 import { adminRouter } from "./Routes/AdminRoute.js";
 import { EmployeeRouter } from "./Routes/EmployeeRoute_fixed.js";
+import con from "./utils/db.js";
+import { authenticateSession } from "./middleware/auth.js";
 const app = express();
 
 app.use(helmet());
@@ -37,24 +41,10 @@ app.use((err, req, res, next) => {
 app.use(adminRouter);
 app.use("/employee", EmployeeRouter);
 
-app.use(express.static('public'))
-const verifyUser = (req, res, next) => {
-  const token = req.cookies.token;
-  if (token) {
-jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-      if (err) return res.status(401).json({ Status: false, Error: "Authentication required" });
-
-      req.id = decoded.id;
-      req.role = decoded.role;
-      next();
-    });
-  } else {
-    return res.status(401).json({ Status: false, Error: "Authentication required" });
-  }
-};
-
-app.get("/verify", verifyUser, (req, res) => {
-  return res.json({ Status: true, role: req.role, id: req.id });
+const publicDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "public");
+app.use("/images", express.static(resolve(publicDirectory, "images")));
+app.get("/verify", authenticateSession, (req, res) => {
+  return res.json({ Status: true, role: req.role, id: req.id, userId: req.userId });
 });
 import http from "http";
 import { Server } from "socket.io";
@@ -75,41 +65,69 @@ const io = new Server(httpServer, {
 // Make io accessible to emitter modules
 globalThis.io = io;
 
-// Helper: parse and verify JWT from cookie for socket auth
-
-
 // --- Socket auth + admin presence tracking ---
 const onlineAdmins = new Map(); // adminId -> Set(socketId)
 
 const getTokenFromCookieHeader = (cookieHeader) => {
   if (!cookieHeader) return null;
   const match = cookieHeader.match(/(?:^|;\s*)token=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
 };
 
-const emitDashboardCounts = async () => {
-  // Local require to avoid circular deps; reuse REST endpoints by querying DB here would be ideal,
-  // but for now we emit via REST-like SQL in mutation routes.
-};
-
-io.on("connection", (socket) => {
+io.use((socket, next) => {
   const cookieHeader = socket.handshake.headers?.cookie;
   const token = getTokenFromCookieHeader(cookieHeader);
-
-  let decoded = null;
-  try {
-    if (token && process.env.JWT_SECRET) {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    }
-  } catch {
-    decoded = null;
+  if (!token || !process.env.JWT_SECRET) {
+    return next(new Error("Authentication required"));
   }
 
-  const role = decoded?.role;
-  const adminId = role === "admin" ? decoded?.id : null;
-  socket.data.role = role;
-  socket.data.adminId = adminId;
+  jwt.verify(token, process.env.JWT_SECRET, (tokenError, decoded) => {
+    if (tokenError || !decoded?.sub) {
+      return next(new Error("Authentication required"));
+    }
+    con.query(
+      `SELECT u.role, u.is_active, a.id AS admin_id, e.id AS employee_id,
+              e.approval_status, e.employment_status
+       FROM users u
+       LEFT JOIN admin a ON a.user_id = u.id
+       LEFT JOIN employee e ON e.user_id = u.id
+       WHERE u.id = ?`,
+      [decoded.sub],
+      (queryError, accounts) => {
+        if (queryError) {
+          console.error("Socket session verification failed:", queryError);
+          return next(new Error("Could not verify account"));
+        }
+        const account = accounts[0];
+        if (!account || !account.is_active || account.role !== decoded.role) {
+          return next(new Error("Authentication required"));
+        }
+        if (account.role === "admin" && !account.admin_id) {
+          return next(new Error("Administrator account is unavailable"));
+        }
+        if (
+          account.role === "employee" &&
+          (!account.employee_id ||
+            account.approval_status !== "approved" ||
+            account.employment_status !== "active")
+        ) {
+          return next(new Error("Employee account is not active or approved"));
+        }
+        socket.data.role = account.role;
+        socket.data.adminId = account.role === "admin" ? account.admin_id : null;
+        return next();
+      },
+    );
+  });
+});
 
+io.on("connection", (socket) => {
+  const { adminId } = socket.data;
   if (adminId) {
     const set = onlineAdmins.get(adminId) || new Set();
     set.add(socket.id);
@@ -143,6 +161,18 @@ io.on("connection", (socket) => {
 });
 
 const port = Number(process.env.PORT) || 3000;
-httpServer.listen(port, () => {
-  console.log(`The server is done (HTTP + Socket.IO) on port ${port}`);
+
+const startServer = async () => {
+  await con.connect();
+  if (process.env.AUTO_MIGRATE === "true" || process.env.AUTO_INIT_SCHEMA === "true") {
+    await con.migrate();
+  }
+  httpServer.listen(port, () => {
+    console.log(`The server is done (HTTP + Socket.IO) on port ${port}`);
+  });
+};
+
+startServer().catch((error) => {
+  console.error("Server startup failed:", error.message);
+  process.exitCode = 1;
 });

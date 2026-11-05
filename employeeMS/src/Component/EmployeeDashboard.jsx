@@ -5,6 +5,8 @@ import {
   Clock,
   CalendarOff,
   Wallet,
+  Award,
+  Bell,
   Settings,
   LogOut,
   Menu,
@@ -14,6 +16,8 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { useTheme } from "../ThemeContext";
+
+const apiBaseUrl = String(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
 
 const EmployeeDashboard = () => {
   const navigate = useNavigate();
@@ -30,7 +34,7 @@ const EmployeeDashboard = () => {
       return;
     }
     axios
-      .get(`http://localhost:3000/employee/detail/${employeeId}`, { withCredentials: true })
+      .get(`${apiBaseUrl}/employee/detail/${employeeId}`, { withCredentials: true })
       .then((result) => {
         if (result.data && result.data.Status) {
           setEmployee(result.data.Result);
@@ -41,7 +45,7 @@ const EmployeeDashboard = () => {
 
   const handleLogout = () => {
     axios
-      .get("http://localhost:3000/employee/logout", { withCredentials: true })
+      .get(`${apiBaseUrl}/employee/logout`, { withCredentials: true })
       .then((result) => {
         if (result.data.Status) {
           localStorage.removeItem("valid");
@@ -58,6 +62,8 @@ const EmployeeDashboard = () => {
     { path: "/employee/dashboard/attendance", label: "Attendance", icon: <Clock size={20} /> },
     { path: "/employee/dashboard/leaves", label: "Leave", icon: <CalendarOff size={20} /> },
     { path: "/employee/dashboard/payroll", label: "Payroll", icon: <Wallet size={20} /> },
+    { path: "/employee/dashboard/performance", label: "Performance", icon: <Award size={20} /> },
+    { path: "/employee/dashboard/notifications", label: "Notifications", icon: <Bell size={20} /> },
     { path: "/employee/dashboard/settings", label: "Settings", icon: <Settings size={20} /> },
   ];
 
@@ -84,8 +90,8 @@ const EmployeeDashboard = () => {
             <img
               src={
                 employee?.image
-                  ? `http://localhost:3000/images/${employee.image}`
-                  : "http://localhost:3000/images/default.png"
+                  ? `${apiBaseUrl}/images/${employee.image}`
+                  : `${apiBaseUrl}/images/default.png`
               }
               alt="employee"
               className="w-12 h-12 rounded-full object-cover border-2 border-blue-500"

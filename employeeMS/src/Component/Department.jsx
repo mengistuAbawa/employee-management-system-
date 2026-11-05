@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 
+const apiBaseUrl = String(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+
 const Department = () => {
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,11 +19,11 @@ const Department = () => {
       setLoading(true);
       setError("");
 
-      const res = await axios.get("http://localhost:3000/auth/department", { withCredentials: true });
+      const res = await axios.get(`${apiBaseUrl}/auth/department`, { withCredentials: true });
       if (res.data.Status) {
         setDepartments(res.data.Result || []);
       } else {
-        setError("Failed to fetch departments");
+        setError(res.data.Error || "Failed to fetch departments");
       }
     } catch (err) {
       console.error(err);
@@ -37,18 +39,16 @@ const Department = () => {
   });
 
   const handleDelete = async (id) => {
-    setLoading(true);
     if (!window.confirm("Delete this department?")) return;
+    setLoading(true);
+    setError("");
     try {
-      const res = await axios.delete(`http://localhost:3000/auth/delete_department/${id}`, { withCredentials: true });
-      if (res.data.Status) {
-        fetchDepartments();
-      } else {
-        alert("Delete failed");
-      }
+      const res = await axios.delete(`${apiBaseUrl}/auth/delete_department/${id}`, { withCredentials: true });
+      if (!res.data?.Status) throw new Error(res.data?.Error || "Delete failed");
+      await fetchDepartments();
     } catch (err) {
-      console.error(err);
-      alert("Delete error");
+      setError(err.response?.data?.Error || err.message || "Delete failed");
+      setLoading(false);
     }
   };
 
@@ -135,4 +135,3 @@ const Department = () => {
 };
 
 export default Department;
-

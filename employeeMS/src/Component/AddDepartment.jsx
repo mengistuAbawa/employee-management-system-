@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 
+const apiBaseUrl = String(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+
 const AddDepartment = () => {
   const [department, setDepartment] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,7 +23,7 @@ const AddDepartment = () => {
       setError("");
 
       const res = await axios.post(
-        "http://localhost:3000/add_department",
+        `${apiBaseUrl}/add_department`,
         { department: department.trim() },
         { withCredentials: true }
       );
@@ -85,4 +87,3 @@ const AddDepartment = () => {
 };
 
 export default AddDepartment;
-

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useParams, useNavigate } from "react-router-dom";
 
+const apiBaseUrl = String(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+
 const AddLeave = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -14,17 +16,20 @@ const AddLeave = () => {
     reason: "",
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (id) {
       axios
-        .get(`http://localhost:3000/auth/employee/${id}`, { withCredentials: true })
+        .get(`${apiBaseUrl}/employee/${id}`, { withCredentials: true })
         .then((res) => {
           if (res.data.Status) {
             setEmployee(Array.isArray(res.data.Result) ? res.data.Result[0] : res.data.Result);
+          } else {
+            setError(res.data.Error || "Could not load employee details");
           }
         })
-        .catch((err) => console.error("Fetch employee error:", err));
+        .catch((err) => setError(err.response?.data?.Error || err.message || "Could not load employee details"));
     }
   }, [id]);
 
@@ -33,17 +38,21 @@ const AddLeave = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError("");
+    if (form.end_date < form.start_date) {
+      setError("End date cannot be before start date.");
+      setLoading(false);
+      return;
+    }
     try {
-      const res = await axios.post("http://localhost:3000/auth/leaves", form, { withCredentials: true });
-      if (res.data.Status) {
-        alert("Leave applied successfully");
+      const res = await axios.post(`${apiBaseUrl}/leaves`, form, { withCredentials: true });
+      if (res.data?.Status) {
         navigate("/dashboard/leaves");
       } else {
-        alert(res.data.Error?.message || res.data.Error || "Failed to apply leave");
+        throw new Error(res.data?.Error?.message || res.data?.Error || "Could not add leave request");
       }
     } catch (err) {
-      console.error(err);
-      alert("Error applying leave");
+      setError(err.response?.data?.Error || err.message || "Could not add leave request");
     } finally {
       setLoading(false);
     }
@@ -57,6 +66,7 @@ const AddLeave = () => {
           <strong>Employee:</strong> {employee.full_name} (ID: {id})
         </div>
       )}
+      {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">{error}</div>}
       <form className="card space-y-4 max-w-3xl" onSubmit={handleSubmit}>
         <input type="hidden" name="employee_id" value={form.employee_id} />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -76,7 +86,7 @@ const AddLeave = () => {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">End Date</label>
-            <input type="date" className="input-field" name="end_date" value={form.end_date} onChange={handleChange} required />
+            <input type="date" className="input-field" name="end_date" value={form.end_date} min={form.start_date || undefined} onChange={handleChange} required />
           </div>
         </div>
         <div>
@@ -93,4 +103,3 @@ const AddLeave = () => {
 };
 
 export default AddLeave;
-

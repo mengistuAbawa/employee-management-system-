@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import profile from "./Image/profile.jpg";
 
+const apiBaseUrl = String(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+
 const Profile = () => {
   const [admin, setAdmin] = useState({ id: null, full_name: "", email: "", image: null });
   const [showAdminEdit, setShowAdminEdit] = useState(false);
@@ -10,6 +12,7 @@ const Profile = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
+  const [imageError, setImageError] = useState("");
 
   useEffect(() => {
     fetchProfile();
@@ -17,9 +20,8 @@ const Profile = () => {
 
   const fetchProfile = () => {
     axios
-      .get("http://localhost:3000/auth/dashboard/admin-profile", { withCredentials: true })
+      .get(`${apiBaseUrl}/dashboard/admin-profile`, { withCredentials: true })
       .then((res) => {
-        console.log("Profile response:", res.data);
         if (res.data.Status) {
           setAdmin({
             id: res.data.id ?? null,
@@ -37,59 +39,53 @@ const Profile = () => {
       .finally(() => setLoading(false));
   };
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviewImage(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
+    e.target.value = "";
     if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)) {
+      setImageError("Choose a JPEG, PNG, WebP, or GIF image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setImageError("Image must be 5 MB or smaller.");
+      return;
+    }
 
     setUploading(true);
+    setImageError("");
     const formData = new FormData();
     formData.append("image", file);
-
+    const reader = new FileReader();
+    reader.onloadend = () => setPreviewImage(reader.result);
+    reader.readAsDataURL(file);
     try {
       const res = await axios.put(
-        "http://localhost:3000/auth/update_profile_image",
+        `${apiBaseUrl}/update_profile_image`,
         formData,
         {
           withCredentials: true,
-          headers: {
-            "Content-Type": "multipart/form-data"
-          },
         }
       );
-
-      console.log("Upload response:", res.data);
-
       if (res.data.Status) {
         setAdmin(prev => ({ ...prev, image: res.data.image }));
         setPreviewImage(null);
-        alert("Profile image updated successfully!");
         fetchProfile();
       } else {
-        alert("Error: " + (res.data.Error || "Unknown error"));
+        setImageError(res.data.Error || "Could not update profile image.");
+        setPreviewImage(null);
       }
     } catch (err) {
-      console.error("Upload error:", err);
-      const errorMsg = err.response?.data?.Error || err.message || "Unknown error";
-      alert("Failed to upload image: " + errorMsg);
+      setImageError(err.response?.data?.Error || "Could not update profile image.");
+      setPreviewImage(null);
     } finally {
       setUploading(false);
     }
   };
 
   // Determine which image to display
-  const displayImage = previewImage || (admin.image 
-    ? `http://localhost:3000/images/${admin.image}` 
+  const displayImage = previewImage || (admin.image
+    ? `${apiBaseUrl}/images/${admin.image}`
     : profile);
 
   if (loading) return <div className="text-center mt-10 text-gray-600 dark:text-gray-300">Loading...</div>;
@@ -102,7 +98,7 @@ const Profile = () => {
 
     try {
       const res = await axios.put(
-        `http://localhost:3000/auth/edit_admin/${admin.id}`,
+        `${apiBaseUrl}/dashboard/admin-profile`,
         { full_name: editForm.full_name, email: editForm.email },
         { withCredentials: true }
       );
@@ -138,10 +134,7 @@ const Profile = () => {
               type="file" 
               accept="image/*" 
               className="hidden" 
-              onChange={(e) => {
-                handleImageChange(e);
-                handleImageUpload(e);
-              }}
+              onChange={handleImageUpload}
               disabled={uploading}
             />
           </label>
@@ -152,15 +145,13 @@ const Profile = () => {
               accept="image/*"
               capture="environment"
               className="hidden"
-              onChange={(e) => {
-                handleImageChange(e);
-                handleImageUpload(e);
-              }}
+              onChange={handleImageUpload}
               disabled={uploading}
             />
           </label>
         </div>
         {uploading && <p className="text-sm text-blue-500 mb-2">Uploading...</p>}
+        {imageError && <p role="alert" className="mb-2 text-sm text-red-600 dark:text-red-400">{imageError}</p>}
 
         <div className="relative group mt-2">
           <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200">{admin.full_name}</h5>

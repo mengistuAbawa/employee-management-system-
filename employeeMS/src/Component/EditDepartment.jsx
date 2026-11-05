@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
+
+const apiBaseUrl = String(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
 
 const EditDepartment = () => {
   const { id } = useParams();
@@ -10,13 +12,9 @@ const EditDepartment = () => {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchDepartment();
-  }, [id]);
-
-  const fetchDepartment = async () => {
+  const fetchDepartment = useCallback(async () => {
     try {
-      const res = await axios.get("http://localhost:3000/auth/department", { withCredentials: true });
+      const res = await axios.get(`${apiBaseUrl}/auth/department`, { withCredentials: true });
 
 
       if (res.data.Status) {
@@ -35,7 +33,11 @@ const EditDepartment = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchDepartment();
+  }, [fetchDepartment]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -49,7 +51,7 @@ const EditDepartment = () => {
       setError("");
 
       const res = await axios.put(
-        `http://localhost:3000/auth/edit_department/${id}`,
+        `${apiBaseUrl}/auth/edit_department/${id}`,
         { name: name.trim() },
         { withCredentials: true }
       );
@@ -130,4 +132,3 @@ const EditDepartment = () => {
 };
 
 export default EditDepartment;
-

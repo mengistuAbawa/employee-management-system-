@@ -1,33 +1,47 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
+
+const apiBaseUrl = String(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
 
 const Salary = () => {
   const [employees, setEmployees] = useState([]);
   const [totalSalary, setTotalSalary] = useState(0);
+  const [totalEmployees, setTotalEmployees] = useState(0);
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [newSalary, setNewSalary] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetchEmployees = () => {
-    axios
-      .get("http://localhost:3000/auth/employee", { withCredentials: true })
-      .then((res) => {
-        if (res.data.Status) {
-          setEmployees(res.data.Result || []);
-          const total = (res.data.Result || []).reduce(
-            (sum, emp) => sum + (parseFloat(emp.salary) || 0),
-            0
-          );
-          setTotalSalary(total);
-        }
-      })
-      .catch((err) => console.error("Fetch employees error:", err));
-  };
+  const fetchEmployees = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [employeeResponse, salaryResponse] = await Promise.all([
+        axios.get(`${apiBaseUrl}/auth/employee`, {
+          params: { limit: 20, offset: page * 20, status: "active" },
+          withCredentials: true,
+        }),
+        axios.get(`${apiBaseUrl}/total_salary`, { withCredentials: true }),
+      ]);
+      if (!employeeResponse.data.Status) throw new Error(employeeResponse.data.Error || "Could not load employee salaries");
+      if (!salaryResponse.data.Status) throw new Error(salaryResponse.data.Error || "Could not load total salary");
+      setEmployees(employeeResponse.data.Result || []);
+      setTotalEmployees(Number(employeeResponse.data.Meta?.total || 0));
+      setTotalSalary(Number(salaryResponse.data.Salary || 0));
+    } catch (err) {
+      console.error("Fetch salaries failed:", err);
+      setError(err.response?.data?.Error || err.message || "Could not load salary details");
+    } finally {
+      setLoading(false);
+    }
+  }, [page]);
 
   useEffect(() => {
     fetchEmployees();
-  }, []);
+  }, [fetchEmployees]);
 
   const openUpdateModal = (employee) => {
     setSelectedEmployee(employee);
@@ -42,7 +56,7 @@ const handleUpdateSalary = (e) => {
     setIsLoading(true);
     axios
       .put(
-        `http://localhost:3000/auth/update_salary/${selectedEmployee.id}`,
+        `${apiBaseUrl}/update_salary/${selectedEmployee.id}`,
         { salary: newSalary },
         { withCredentials: true }
       )
@@ -79,6 +93,7 @@ const handleUpdateSalary = (e) => {
           Total Salary Payout: <strong className="text-2xl">${totalSalary.toLocaleString()}</strong>
         </h5>
       </div>
+      {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
 
       <div className="card overflow-x-auto">
         <table className="w-full text-sm text-left">
@@ -113,11 +128,24 @@ const handleUpdateSalary = (e) => {
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">No employees found.</td>
+                <td colSpan={6} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                  {loading ? "Loading employees..." : "No active employees found."}
+                </td>
               </tr>
             )}
           </tbody>
         </table>
+      </div>
+      <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+        <span>{totalEmployees ? `${page * 20 + 1}–${Math.min((page + 1) * 20, totalEmployees)} of ${totalEmployees}` : "0 employees"}</span>
+        <div className="flex gap-2">
+          <button type="button" className="btn-secondary px-3 py-1" onClick={() => setPage((current) => Math.max(current - 1, 0))} disabled={page === 0 || loading}>
+            Previous
+          </button>
+          <button type="button" className="btn-secondary px-3 py-1" onClick={() => setPage((current) => current + 1)} disabled={(page + 1) * 20 >= totalEmployees || loading}>
+            Next
+          </button>
+        </div>
       </div>
 
       {/* Update Salary Modal */}
@@ -173,4 +201,3 @@ const handleUpdateSalary = (e) => {
 };
 
 export default Salary;
-

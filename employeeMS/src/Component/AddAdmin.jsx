@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 
+const apiBaseUrl = String(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+
 const AddAdmin = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState({ full_name: "", email: "", password: "" });
@@ -13,12 +15,12 @@ const AddAdmin = () => {
     e.preventDefault();
     setLoading(true);
     try {
-http://localhost:3000/add_admin
+      const res = await axios.post(`${apiBaseUrl}/add_admin`, form, { withCredentials: true });
       if (res.data?.Status) navigate("/dashboard");
       else alert(res.data?.Error || "Add failed");
     } catch (err) {
       console.error(err);
-      alert("Add admin error");
+      alert(err.response?.data?.Error || "Add admin error");
     } finally {
       setLoading(false);
     }
@@ -39,7 +41,7 @@ http://localhost:3000/add_admin
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Password</label>
-            <input name="password" type="password" className="input-field" value={form.password} onChange={handleChange} required />
+            <input name="password" type="password" autoComplete="new-password" minLength={12} maxLength={72} className="input-field" value={form.password} onChange={handleChange} required />
           </div>
           <div className="flex gap-2">
             <button type="submit" className="btn-primary flex-1" disabled={loading}>{loading ? "Saving..." : "Save"}</button>
@@ -52,4 +54,3 @@ http://localhost:3000/add_admin
 };
 
 export default AddAdmin;
-

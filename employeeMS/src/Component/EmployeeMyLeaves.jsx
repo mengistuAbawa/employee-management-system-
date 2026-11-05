@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { CalendarOff, Plus } from "lucide-react";
 
+const apiBaseUrl = String(import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+
 const getStatusBadge = (status) => {
   const s = (status || "").toLowerCase();
   if (s === "approved") return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200">Approved</span>;
@@ -11,20 +13,33 @@ const getStatusBadge = (status) => {
 
 const EmployeeMyLeaves = () => {
   const [leaves, setLeaves] = useState([]);
+  const [leaveBalances, setLeaveBalances] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ leave_type: "Annual", start_date: "", end_date: "", reason: "" });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const employeeId = localStorage.getItem("employeeId");
 
   const fetchLeaves = useCallback(() => {
     if (!employeeId) return;
-    axios
-      .get(`http://localhost:3000/employee/leaves/${employeeId}`, { withCredentials: true })
-      .then((res) => {
-        if (res.data?.Status) setLeaves(res.data.Result || []);
+    Promise.all([
+      axios.get(`${apiBaseUrl}/employee/leaves/${employeeId}`, { withCredentials: true }),
+      axios.get(`${apiBaseUrl}/employee/dashboard-summary`, { withCredentials: true }),
+    ])
+      .then(([leaveResponse, dashboardResponse]) => {
+        if (!leaveResponse.data?.Status) {
+          throw new Error(leaveResponse.data?.Error || "Could not load leave history");
+        }
+        if (!dashboardResponse.data?.Status) {
+          throw new Error(dashboardResponse.data?.Error || "Could not load leave balances");
+        }
+        setLeaves(leaveResponse.data.Result || []);
+        setLeaveBalances(dashboardResponse.data.Result?.leaveBalances || []);
+        setError("");
       })
-      .catch((err) => console.error(err));
+      .catch((requestError) => setError(requestError.response?.data?.Error || requestError.message || "Could not load leave information"));
   }, [employeeId]);
 
   useEffect(() => {
@@ -36,18 +51,25 @@ const EmployeeMyLeaves = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError("");
+    setSuccess("");
+    if (form.end_date < form.start_date) {
+      setError("End date cannot be before start date.");
+      setLoading(false);
+      return;
+    }
     try {
-      const res = await axios.post("http://localhost:3000/employee/leaves", form, { withCredentials: true });
-      if (res.data.Status) {
+      const res = await axios.post(`${apiBaseUrl}/employee/leaves`, form, { withCredentials: true });
+      if (res.data?.Status) {
         setForm({ leave_type: "Annual", start_date: "", end_date: "", reason: "" });
         setShowForm(false);
+        setSuccess(res.data.Message || "Leave request submitted.");
         fetchLeaves();
       } else {
-        alert(res.data.Error || "Failed to apply leave");
+        throw new Error(res.data?.Error || "Could not apply for leave");
       }
     } catch (err) {
-      console.error(err);
-      alert("Error applying leave");
+      setError(err.response?.data?.Error || err.message || "Could not apply for leave");
     } finally {
       setLoading(false);
     }
@@ -63,6 +85,29 @@ const EmployeeMyLeaves = () => {
           <Plus size={18} /> Apply Leave
         </button>
       </div>
+      {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">{error}</div>}
+      {success && <div role="status" className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200">{success}</div>}
+
+      <section className="card">
+        <h5 className="mb-4 text-lg font-bold text-gray-800 dark:text-white">Leave balances</h5>
+        {leaveBalances.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">No leave balances are configured for this year yet.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {leaveBalances.map((balance) => (
+              <div key={balance.leave_type} className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                <p className="font-semibold text-gray-800 dark:text-gray-100">{balance.leave_type}</p>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                  {Number(balance.remaining_days)} days remaining
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {Number(balance.used_days)} used of {Number(balance.entitled_days)} entitled
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {showForm && (
         <div className="card">
@@ -85,7 +130,7 @@ const EmployeeMyLeaves = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">End Date</label>
-                <input type="date" name="end_date" className="input-field" value={form.end_date} onChange={handleChange} required />
+                <input type="date" name="end_date" className="input-field" value={form.end_date} min={form.start_date || undefined} onChange={handleChange} required />
               </div>
             </div>
             <div>
@@ -116,8 +161,8 @@ const EmployeeMyLeaves = () => {
                 <tr key={l.id || idx} className="border-b dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                   <td className="px-4 py-3">{idx + 1}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{l.leave_type}</td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{new Date(l.start_date).toLocaleDateString()}</td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{new Date(l.end_date).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{new Date(`${String(l.start_date).slice(0, 10)}T00:00:00`).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{new Date(`${String(l.end_date).slice(0, 10)}T00:00:00`).toLocaleDateString()}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{l.reason}</td>
                   <td className="px-4 py-3">{getStatusBadge(l.status)}</td>
                 </tr>

@@ -46,10 +46,14 @@ CREATE TABLE IF NOT EXISTS leaves (
   applied_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO department (name) VALUES
-  ('UI/UX'), ('Art'), ('Design'), ('Development')
-ON CONFLICT (name) DO NOTHING;
-
-INSERT INTO category (name) VALUES
-  ('Frontend'), ('Backend'), ('Designer'), ('QA')
-ON CONFLICT (name) DO NOTHING;
+CREATE TABLE IF NOT EXISTS attendance (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES employee(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  clock_in_time TIME,
+  clock_out_time TIME,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'approved', 'rejected')),
+  submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT unique_attendance_employee_date UNIQUE (employee_id, date)
+);
